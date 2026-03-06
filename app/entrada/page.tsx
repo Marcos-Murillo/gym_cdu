@@ -30,16 +30,16 @@ export default function EntradaPage() {
   const [success, setSuccess] = useState(false)
   const [searching, setSearching] = useState(false)
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setError("")
     setSuccess(false)
     setSearching(true)
 
-    const user = getUserByDocument(codigo)
+    const user = await getUserByDocument(codigo)
     
     if (user) {
       setUsuario(user)
-      const userEntries = getEntriesByUser(user.id)
+      const userEntries = await getEntriesByUser(user.id)
       setEntradas(userEntries)
     } else {
       setUsuario(null)
@@ -50,14 +50,14 @@ export default function EntradaPage() {
     setSearching(false)
   }
 
-  const handleRegisterEntry = () => {
+  const handleRegisterEntry = async () => {
     if (!usuario) return
 
-    saveEntry(usuario.id)
+    await saveEntry(usuario.id)
     setSuccess(true)
     
     // Actualizar lista de entradas
-    const userEntries = getEntriesByUser(usuario.id)
+    const userEntries = await getEntriesByUser(usuario.id)
     setEntradas(userEntries)
 
     setTimeout(() => {

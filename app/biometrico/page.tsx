@@ -58,15 +58,15 @@ export default function BiometricoPage() {
     notas: "",
   })
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setError("")
     setSuccess(false)
     
-    const user = getUserByDocument(codigo)
+    const user = await getUserByDocument(codigo)
     
     if (user) {
       setUsuario(user)
-      const userBiometric = getBiometricByUser(user.id)
+      const userBiometric = await getBiometricByUser(user.id)
       setHistorial(userBiometric)
     } else {
       setUsuario(null)
@@ -91,7 +91,7 @@ export default function BiometricoPage() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!usuario) return
 
     // Validar campos requeridos
@@ -104,7 +104,7 @@ export default function BiometricoPage() {
     const peso = parseFloat(formData.peso)
     const imc = calculateIMC(peso, altura)
 
-    saveBiometricData({
+    await saveBiometricData({
       usuarioId: usuario.id,
       altura,
       peso,
@@ -118,7 +118,7 @@ export default function BiometricoPage() {
     })
 
     // Actualizar historial
-    const userBiometric = getBiometricByUser(usuario.id)
+    const userBiometric = await getBiometricByUser(usuario.id)
     setHistorial(userBiometric)
 
     // Limpiar formulario
