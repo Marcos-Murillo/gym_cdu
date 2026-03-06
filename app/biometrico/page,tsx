@@ -1,0 +1,736 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { 
+  Activity, 
+  Search, 
+  User,
+  Save,
+  CheckCircle2,
+  XCircle,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Calendar,
+  Scale,
+  Ruler,
+  Heart,
+  Percent
+} from "lucide-react"
+import { getUserByDocument, saveBiometricData, getBiometricByUser, getUsers } from "@/lib/storage"
+import type { UserProfile, BiometricData } from "@/lib/types"
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from "recharts"
+
+export default function BiometricoPage() {
+  const [codigo, setCodigo] = useState("")
+  const [usuario, setUsuario] = useState<UserProfile | null>(null)
+  const [historial, setHistorial] = useState<BiometricData[]>([])
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [activeTab, setActiveTab] = useState("registro")
+
+  // Formulario biometrico
+  const [formData, setFormData] = useState({
+    altura: "",
+    peso: "",
+    grasaCorporal: "",
+    masaMuscular: "",
+    circunferenciaCintura: "",
+    circunferenciaCadera: "",
+    frecuenciaCardiacaReposo: "",
+    notas: "",
+  })
+
+  const handleSearch = () => {
+    setError("")
+    setSuccess(false)
+    
+    const user = getUserByDocument(codigo)
+    
+    if (user) {
+      setUsuario(user)
+      const userBiometric = getBiometricByUser(user.id)
+      setHistorial(userBiometric)
+    } else {
+      setUsuario(null)
+      setHistorial([])
+      setError("Usuario no encontrado. Asegurate de que este registrado en el sistema.")
+    }
+  }
+
+  const calculateIMC = (peso: number, altura: number): number => {
+    const alturaM = altura / 100
+    return Number((peso / (alturaM * alturaM)).toFixed(2))
+  }
+
+  const getIMCCategory = (imc: number): { label: string; color: string } => {
+    if (imc < 18.5) return { label: "Bajo peso", color: "text-blue-600" }
+    if (imc < 25) return { label: "Normal", color: "text-emerald-600" }
+    if (imc < 30) return { label: "Sobrepeso", color: "text-amber-600" }
+    return { label: "Obesidad", color: "text-red-600" }
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleSubmit = () => {
+    if (!usuario) return
+
+    // Validar campos requeridos
+    if (!formData.altura || !formData.peso) {
+      setError("La altura y el peso son campos requeridos")
+      return
+    }
+
+    const altura = parseFloat(formData.altura)
+    const peso = parseFloat(formData.peso)
+    const imc = calculateIMC(peso, altura)
+
+    saveBiometricData({
+      usuarioId: usuario.id,
+      altura,
+      peso,
+      grasaCorporal: formData.grasaCorporal ? parseFloat(formData.grasaCorporal) : 0,
+      masaMuscular: formData.masaMuscular ? parseFloat(formData.masaMuscular) : 0,
+      imc,
+      circunferenciaCintura: formData.circunferenciaCintura ? parseFloat(formData.circunferenciaCintura) : 0,
+      circunferenciaCadera: formData.circunferenciaCadera ? parseFloat(formData.circunferenciaCadera) : 0,
+      frecuenciaCardiacaReposo: formData.frecuenciaCardiacaReposo ? parseInt(formData.frecuenciaCardiacaReposo) : 0,
+      notas: formData.notas,
+    })
+
+    // Actualizar historial
+    const userBiometric = getBiometricByUser(usuario.id)
+    setHistorial(userBiometric)
+
+    // Limpiar formulario
+    setFormData({
+      altura: "",
+      peso: "",
+      grasaCorporal: "",
+      masaMuscular: "",
+      circunferenciaCintura: "",
+      circunferenciaCadera: "",
+      frecuenciaCardiacaReposo: "",
+      notas: "",
+    })
+
+    setSuccess(true)
+    setTimeout(() => setSuccess(false), 3000)
+  }
+
+  const handleReset = () => {
+    setCodigo("")
+    setUsuario(null)
+    setHistorial([])
+    setError("")
+    setSuccess(false)
+    setFormData({
+      altura: "",
+      peso: "",
+      grasaCorporal: "",
+      masaMuscular: "",
+      circunferenciaCintura: "",
+      circunferenciaCadera: "",
+      frecuenciaCardiacaReposo: "",
+      notas: "",
+    })
+  }
+
+  // Preparar datos para graficos
+  const chartData = historial.slice().reverse().map(record => ({
+    fecha: new Date(record.fecha).toLocaleDateString(),
+    peso: record.peso,
+    imc: record.imc,
+    grasa: record.grasaCorporal,
+    musculo: record.masaMuscular,
+  }))
+
+  // Calcular tendencias
+  const getTrend = (current: number, previous: number): "up" | "down" | "same" => {
+    if (current > previous) return "up"
+    if (current < previous) return "down"
+    return "same"
+  }
+
+  const latestRecord = historial[0]
+  const previousRecord = historial[1]
+
+  return (
+    <div className="space-y-6">
+      <div className="text-center space-y-2">
+        <h1 className="text-3xl font-bold text-foreground">Estudio Biometrico</h1>
+        <p className="text-muted-foreground">Registra y analiza los datos biometricos de los usuarios</p>
+      </div>
+
+      {/* Busqueda de usuario */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
+              <Activity className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <CardTitle className="text-xl">Buscar Usuario</CardTitle>
+              <CardDescription>Ingresa el numero de documento del usuario</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <Label htmlFor="codigo" className="sr-only">Numero de Documento</Label>
+              <Input
+                id="codigo"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                placeholder="Ingresa el numero de documento"
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              />
+            </div>
+            <Button onClick={handleSearch} disabled={!codigo} className="bg-purple-600 hover:bg-purple-700">
+              <Search className="h-4 w-4 mr-2" />
+              Buscar
+            </Button>
+            {usuario && (
+              <Button variant="outline" onClick={handleReset}>
+                Limpiar
+              </Button>
+            )}
+          </div>
+
+          {error && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {success && (
+            <Alert className="border-emerald-200 bg-emerald-50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <AlertTitle className="text-emerald-800">Datos Guardados</AlertTitle>
+              <AlertDescription className="text-emerald-700">
+                Los datos biometricos han sido registrados exitosamente.
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+
+      {usuario && (
+        <>
+          {/* Info del usuario */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <div className="h-14 w-14 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <User className="h-7 w-7 text-emerald-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">{usuario.nombres}</h2>
+                  <p className="text-muted-foreground">{usuario.correo}</p>
+                </div>
+                <Badge variant="secondary" className="ml-auto">
+                  {historial.length} registros
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="registro">Nuevo Registro</TabsTrigger>
+              <TabsTrigger value="historial">Historial</TabsTrigger>
+              <TabsTrigger value="estadisticas">Estadisticas</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="registro" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Registrar Datos Biometricos</CardTitle>
+                  <CardDescription>Ingresa las mediciones del usuario</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="altura" className="flex items-center gap-2">
+                        <Ruler className="h-4 w-4" />
+                        Altura (cm) *
+                      </Label>
+                      <Input
+                        id="altura"
+                        type="number"
+                        value={formData.altura}
+                        onChange={(e) => handleInputChange("altura", e.target.value)}
+                        placeholder="170"
+                        min="100"
+                        max="250"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="peso" className="flex items-center gap-2">
+                        <Scale className="h-4 w-4" />
+                        Peso (kg) *
+                      </Label>
+                      <Input
+                        id="peso"
+                        type="number"
+                        step="0.1"
+                        value={formData.peso}
+                        onChange={(e) => handleInputChange("peso", e.target.value)}
+                        placeholder="70"
+                        min="30"
+                        max="300"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="grasaCorporal" className="flex items-center gap-2">
+                        <Percent className="h-4 w-4" />
+                        Grasa Corporal (%)
+                      </Label>
+                      <Input
+                        id="grasaCorporal"
+                        type="number"
+                        step="0.1"
+                        value={formData.grasaCorporal}
+                        onChange={(e) => handleInputChange("grasaCorporal", e.target.value)}
+                        placeholder="20"
+                        min="3"
+                        max="60"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="masaMuscular" className="flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Masa Muscular (%)
+                      </Label>
+                      <Input
+                        id="masaMuscular"
+                        type="number"
+                        step="0.1"
+                        value={formData.masaMuscular}
+                        onChange={(e) => handleInputChange("masaMuscular", e.target.value)}
+                        placeholder="40"
+                        min="20"
+                        max="70"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="circunferenciaCintura">Circunferencia Cintura (cm)</Label>
+                      <Input
+                        id="circunferenciaCintura"
+                        type="number"
+                        step="0.1"
+                        value={formData.circunferenciaCintura}
+                        onChange={(e) => handleInputChange("circunferenciaCintura", e.target.value)}
+                        placeholder="80"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="circunferenciaCadera">Circunferencia Cadera (cm)</Label>
+                      <Input
+                        id="circunferenciaCadera"
+                        type="number"
+                        step="0.1"
+                        value={formData.circunferenciaCadera}
+                        onChange={(e) => handleInputChange("circunferenciaCadera", e.target.value)}
+                        placeholder="95"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="frecuenciaCardiacaReposo" className="flex items-center gap-2">
+                        <Heart className="h-4 w-4" />
+                        Frecuencia Cardiaca Reposo (bpm)
+                      </Label>
+                      <Input
+                        id="frecuenciaCardiacaReposo"
+                        type="number"
+                        value={formData.frecuenciaCardiacaReposo}
+                        onChange={(e) => handleInputChange("frecuenciaCardiacaReposo", e.target.value)}
+                        placeholder="70"
+                        min="40"
+                        max="120"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="notas">Notas adicionales</Label>
+                    <Textarea
+                      id="notas"
+                      value={formData.notas}
+                      onChange={(e) => handleInputChange("notas", e.target.value)}
+                      placeholder="Observaciones, recomendaciones, etc."
+                      rows={3}
+                    />
+                  </div>
+
+                  {/* IMC Preview */}
+                  {formData.altura && formData.peso && (
+                    <Card className="bg-muted/50">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-muted-foreground">IMC Calculado</p>
+                            <p className="text-2xl font-bold">
+                              {calculateIMC(parseFloat(formData.peso), parseFloat(formData.altura))}
+                            </p>
+                          </div>
+                          <Badge 
+                            variant="secondary"
+                            className={getIMCCategory(calculateIMC(parseFloat(formData.peso), parseFloat(formData.altura))).color}
+                          >
+                            {getIMCCategory(calculateIMC(parseFloat(formData.peso), parseFloat(formData.altura))).label}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <Button 
+                    onClick={handleSubmit} 
+                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    disabled={!formData.altura || !formData.peso}
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Guardar Registro
+                  </Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="historial" className="space-y-4">
+              {historial.length > 0 ? (
+                <div className="space-y-4">
+                  {historial.map((record, index) => {
+                    const imcCategory = getIMCCategory(record.imc)
+                    const prevRecord = historial[index + 1]
+                    
+                    return (
+                      <Card key={record.id}>
+                        <CardContent className="pt-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm text-muted-foreground">
+                                {new Date(record.fecha).toLocaleDateString()} - {new Date(record.fecha).toLocaleTimeString()}
+                              </span>
+                            </div>
+                            {index === 0 && (
+                              <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                                Mas reciente
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">Peso</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-lg font-semibold">{record.peso} kg</p>
+                                {prevRecord && (
+                                  getTrend(record.peso, prevRecord.peso) === "up" ? (
+                                    <TrendingUp className="h-4 w-4 text-red-500" />
+                                  ) : getTrend(record.peso, prevRecord.peso) === "down" ? (
+                                    <TrendingDown className="h-4 w-4 text-emerald-500" />
+                                  ) : (
+                                    <Minus className="h-4 w-4 text-muted-foreground" />
+                                  )
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">Altura</p>
+                              <p className="text-lg font-semibold">{record.altura} cm</p>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-sm text-muted-foreground">IMC</p>
+                              <div className="flex items-center gap-2">
+                                <p className={`text-lg font-semibold ${imcCategory.color}`}>
+                                  {record.imc}
+                                </p>
+                                <span className={`text-xs ${imcCategory.color}`}>
+                                  ({imcCategory.label})
+                                </span>
+                              </div>
+                            </div>
+
+                            {record.grasaCorporal > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">Grasa Corporal</p>
+                                <p className="text-lg font-semibold">{record.grasaCorporal}%</p>
+                              </div>
+                            )}
+
+                            {record.masaMuscular > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">Masa Muscular</p>
+                                <p className="text-lg font-semibold">{record.masaMuscular}%</p>
+                              </div>
+                            )}
+
+                            {record.frecuenciaCardiacaReposo > 0 && (
+                              <div className="space-y-1">
+                                <p className="text-sm text-muted-foreground">FC Reposo</p>
+                                <p className="text-lg font-semibold">{record.frecuenciaCardiacaReposo} bpm</p>
+                              </div>
+                            )}
+                          </div>
+
+                          {record.notas && (
+                            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                              <p className="text-sm text-muted-foreground">Notas:</p>
+                              <p className="text-sm">{record.notas}</p>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              ) : (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="text-center space-y-4">
+                      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+                        <Activity className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">Sin registros</h3>
+                        <p className="text-muted-foreground">
+                          Este usuario no tiene registros biometricos aun
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="estadisticas" className="space-y-4">
+              {historial.length > 1 ? (
+                <>
+                  {/* Grafico de Peso */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Scale className="h-5 w-5" />
+                        Evolucion del Peso
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                          <YAxis domain={['dataMin - 2', 'dataMax + 2']} />
+                          <Tooltip />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="peso" 
+                            stroke="#10b981" 
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                            name="Peso (kg)"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Grafico de IMC */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="h-5 w-5" />
+                        Evolucion del IMC
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={250}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                          <YAxis domain={[15, 35]} />
+                          <Tooltip />
+                          <Legend />
+                          <Line 
+                            type="monotone" 
+                            dataKey="imc" 
+                            stroke="#3b82f6" 
+                            strokeWidth={2}
+                            dot={{ r: 4 }}
+                            name="IMC"
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Grafico de Composicion Corporal */}
+                  {chartData.some(d => d.grasa > 0 || d.musculo > 0) && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Percent className="h-5 w-5" />
+                          Composicion Corporal
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart data={chartData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="fecha" tick={{ fontSize: 10 }} />
+                            <YAxis domain={[0, 60]} />
+                            <Tooltip />
+                            <Legend />
+                            <Line 
+                              type="monotone" 
+                              dataKey="grasa" 
+                              stroke="#f59e0b" 
+                              strokeWidth={2}
+                              dot={{ r: 4 }}
+                              name="Grasa (%)"
+                            />
+                            <Line 
+                              type="monotone" 
+                              dataKey="musculo" 
+                              stroke="#8b5cf6" 
+                              strokeWidth={2}
+                              dot={{ r: 4 }}
+                              name="Musculo (%)"
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Resumen */}
+                  {latestRecord && previousRecord && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Resumen de Progreso</CardTitle>
+                        <CardDescription>Comparacion con el registro anterior</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-sm text-muted-foreground">Cambio de Peso</p>
+                            <p className={`text-xl font-bold ${
+                              latestRecord.peso < previousRecord.peso 
+                                ? "text-emerald-600" 
+                                : latestRecord.peso > previousRecord.peso 
+                                  ? "text-red-600" 
+                                  : "text-foreground"
+                            }`}>
+                              {latestRecord.peso - previousRecord.peso > 0 ? "+" : ""}
+                              {(latestRecord.peso - previousRecord.peso).toFixed(1)} kg
+                            </p>
+                          </div>
+
+                          <div className="p-4 rounded-lg bg-muted/50 text-center">
+                            <p className="text-sm text-muted-foreground">Cambio de IMC</p>
+                            <p className={`text-xl font-bold ${
+                              latestRecord.imc < previousRecord.imc 
+                                ? "text-emerald-600" 
+                                : latestRecord.imc > previousRecord.imc 
+                                  ? "text-red-600" 
+                                  : "text-foreground"
+                            }`}>
+                              {latestRecord.imc - previousRecord.imc > 0 ? "+" : ""}
+                              {(latestRecord.imc - previousRecord.imc).toFixed(2)}
+                            </p>
+                          </div>
+
+                          {latestRecord.grasaCorporal > 0 && previousRecord.grasaCorporal > 0 && (
+                            <div className="p-4 rounded-lg bg-muted/50 text-center">
+                              <p className="text-sm text-muted-foreground">Cambio Grasa</p>
+                              <p className={`text-xl font-bold ${
+                                latestRecord.grasaCorporal < previousRecord.grasaCorporal 
+                                  ? "text-emerald-600" 
+                                  : latestRecord.grasaCorporal > previousRecord.grasaCorporal 
+                                    ? "text-red-600" 
+                                    : "text-foreground"
+                              }`}>
+                                {latestRecord.grasaCorporal - previousRecord.grasaCorporal > 0 ? "+" : ""}
+                                {(latestRecord.grasaCorporal - previousRecord.grasaCorporal).toFixed(1)}%
+                              </p>
+                            </div>
+                          )}
+
+                          {latestRecord.masaMuscular > 0 && previousRecord.masaMuscular > 0 && (
+                            <div className="p-4 rounded-lg bg-muted/50 text-center">
+                              <p className="text-sm text-muted-foreground">Cambio Musculo</p>
+                              <p className={`text-xl font-bold ${
+                                latestRecord.masaMuscular > previousRecord.masaMuscular 
+                                  ? "text-emerald-600" 
+                                  : latestRecord.masaMuscular < previousRecord.masaMuscular 
+                                    ? "text-red-600" 
+                                    : "text-foreground"
+                              }`}>
+                                {latestRecord.masaMuscular - previousRecord.masaMuscular > 0 ? "+" : ""}
+                                {(latestRecord.masaMuscular - previousRecord.masaMuscular).toFixed(1)}%
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="py-12">
+                    <div className="text-center space-y-4">
+                      <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto">
+                        <TrendingUp className="h-8 w-8 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-foreground">Datos insuficientes</h3>
+                        <p className="text-muted-foreground">
+                          Se necesitan al menos 2 registros para mostrar estadisticas
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
+        </>
+      )}
+    </div>
+  )
+}
