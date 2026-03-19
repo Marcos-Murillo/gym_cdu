@@ -13,7 +13,7 @@ export const ETNIAS = [
 ] as const
 
 export const TIPOS_DOCUMENTO = [
-  "TARGETA DE IDENTIDAD",
+  "TARJETA DE IDENTIDAD",
   "CEDULA",
   "CEDULA DE EXTRANJERIA",
   "PASAPORTE",

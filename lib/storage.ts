@@ -4,16 +4,18 @@ import {
   getDocs, 
   getDoc, 
   addDoc, 
-  updateDoc, 
+  updateDoc,
+  deleteDoc,
   query, 
   where,
   orderBy,
   Timestamp
 } from "firebase/firestore"
 import { db } from "./firebase"
-import type { UserProfile, BiometricData, EntryRecord, AttendanceStats } from "./types"
+import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord } from "./types"
 
 const USERS_COLLECTION = "users"
+const LOCKERS_COLLECTION = "lockers"
 const ENTRIES_COLLECTION = "entries"
 const BIOMETRIC_COLLECTION = "biometric"
 
@@ -39,12 +41,55 @@ export async function saveUser(user: Omit<UserProfile, "id" | "fechaRegistro" | 
   } as UserProfile
 }
 
+// Función para buscar usuario por nombre, cédula o código estudiantil
+export async function searchUserByCode(searchTerm: string): Promise<UserProfile | undefined> {
+  try {
+    // Validar que el término no esté vacío
+    if (!searchTerm || searchTerm.trim() === "") {
+      return undefined
+    }
+
+    const term = searchTerm.trim()
+    const termLower = term.toLowerCase()
+
+    // Obtener todos los usuarios de la base de datos
+    const allUsers = await getUsers()
+
+    // Buscar el usuario que coincida con el término de búsqueda
+    const foundUser = allUsers.find(user => {
+      // Buscar por número de documento (cédula) - coincidencia exacta o parcial
+      if (user.numeroDocumento) {
+        const docNorm = user.numeroDocumento.trim().toLowerCase()
+        if (docNorm === termLower || docNorm.includes(termLower)) return true
+      }
+
+      // Buscar por código estudiantil - coincidencia exacta o parcial
+      if (user.codigoEstudiantil) {
+        const codNorm = user.codigoEstudiantil.trim().toLowerCase()
+        if (codNorm === termLower || codNorm.includes(termLower)) return true
+      }
+
+      // Buscar por nombre - coincidencia parcial
+      if (user.nombres && user.nombres.toLowerCase().includes(termLower)) {
+        return true
+      }
+
+      return false
+    })
+
+    return foundUser
+  } catch (error) {
+    console.error("Error en searchUserByCode:", error)
+    return undefined
+  }
+}
+
 export async function getUserByDocument(numeroDocumento: string): Promise<UserProfile | undefined> {
-  const q = query(collection(db, USERS_COLLECTION), where("numeroDocumento", "==", numeroDocumento))
-  const querySnapshot = await getDocs(q)
-  if (querySnapshot.empty) return undefined
-  const doc = querySnapshot.docs[0]
-  return { id: doc.id, ...doc.data() } as UserProfile
+  const allUsers = await getUsers()
+  return allUsers.find(u => u.numeroDocumento?.trim().toLowerCase() === numeroDocumento.trim().toLowerCase())
+}
+export async function searchUser(searchTerm: string): Promise<UserProfile | undefined> {
+  return searchUserByCode(searchTerm)
 }
 
 export async function getUserById(id: string): Promise<UserProfile | undefined> {
@@ -62,6 +107,15 @@ export async function updateUser(id: string, data: Partial<UserProfile>): Promis
   return { id: updated.id, ...updated.data() } as UserProfile
 }
 
+export async function deleteUser(id: string): Promise<void> {
+  const docRef = doc(db, USERS_COLLECTION, id)
+  await deleteDoc(docRef)
+}
+
+export async function removeUser(id: string): Promise<void> {
+  return deleteUser(id)
+}
+
 // === ENTRADAS ===
 export async function getEntries(): Promise<EntryRecord[]> {
   const querySnapshot = await getDocs(collection(db, ENTRIES_COLLECTION))
@@ -71,10 +125,11 @@ export async function getEntries(): Promise<EntryRecord[]> {
   })) as EntryRecord[]
 }
 
-export async function saveEntry(usuarioId: string): Promise<EntryRecord> {
+export async function saveEntry(usuarioId: string, instalacion: "gimnasio" | "piscina" = "gimnasio"): Promise<EntryRecord> {
   const now = new Date()
   const newEntry = {
     usuarioId,
+    instalacion,
     fecha: now.toISOString().split("T")[0],
     hora: now.toTimeString().split(" ")[0],
   }
@@ -127,9 +182,17 @@ export async function getBiometricByUser(usuarioId: string): Promise<BiometricDa
 }
 
 // === ESTADISTICAS ===
-export async function generateStats(): Promise<AttendanceStats> {
+export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promise<AttendanceStats> {
   const users = await getUsers()
-  const entries = await getEntries()
+  const allEntries = await getEntries()
+
+  const totalGimnasio = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").length
+  const totalPiscina = allEntries.filter(e => e.instalacion === "piscina").length
+
+  // Filtrar entradas por instalacion si se especifica
+  const entries = instalacion
+    ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
+    : allEntries
 
   const porGenero: Record<string, number> = {}
   const porEstamento: Record<string, number> = {}
@@ -167,6 +230,8 @@ export async function generateStats(): Promise<AttendanceStats> {
   return {
     totalUsuarios: users.length,
     totalEntradas: entries.length,
+    totalGimnasio,
+    totalPiscina,
     porGenero,
     porEstamento,
     porFacultad,
@@ -200,4 +265,58 @@ export async function filterUsers(filters: {
   }
 
   return users
+}
+
+// === GUARDARROPAS ===
+function generateToken(): string {
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  const l1 = letters[Math.floor(Math.random() * letters.length)]
+  const l2 = letters[Math.floor(Math.random() * letters.length)]
+  const n1 = Math.floor(Math.random() * 10)
+  const n2 = Math.floor(Math.random() * 10)
+  const n3 = Math.floor(Math.random() * 10)
+  return `${l1}${l2}${n1}${n2}${n3}`
+}
+
+export async function getActiveLockers(): Promise<LockerRecord[]> {
+  const q = query(collection(db, LOCKERS_COLLECTION), where("estado", "==", "ocupado"))
+  const querySnapshot = await getDocs(q)
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LockerRecord[]
+}
+
+export async function createLockerRecord(casillero: string, usuarioId: string): Promise<LockerRecord> {
+  const now = new Date()
+  // Asegurar token único
+  const activeLockers = await getActiveLockers()
+  const usedTokens = new Set(activeLockers.map(l => l.token))
+  let token = generateToken()
+  let attempts = 0
+  while (usedTokens.has(token) && attempts < 20) {
+    token = generateToken()
+    attempts++
+  }
+
+  const record: Omit<LockerRecord, "id"> = {
+    casillero,
+    token,
+    usuarioId,
+    fechaIngreso: now.toISOString().split("T")[0],
+    horaIngreso: now.toTimeString().split(" ")[0],
+    estado: "ocupado",
+  }
+  const docRef = await addDoc(collection(db, LOCKERS_COLLECTION), record)
+  return { ...record, id: docRef.id }
+}
+
+export async function releaseLocker(id: string): Promise<void> {
+  const docRef = doc(db, LOCKERS_COLLECTION, id)
+  await updateDoc(docRef, { estado: "libre" })
+}
+
+export async function validateLockerToken(casillero: string, token: string): Promise<LockerRecord | null> {
+  const activeLockers = await getActiveLockers()
+  const match = activeLockers.find(
+    l => l.casillero === casillero && l.token.toUpperCase() === token.toUpperCase()
+  )
+  return match ?? null
 }

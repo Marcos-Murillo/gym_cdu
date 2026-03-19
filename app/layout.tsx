@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ConditionalNavigation } from '@/components/conditional-navigation'
+import { AuthProvider } from '@/lib/auth-context'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -38,10 +39,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased min-h-screen bg-background">
-        <ConditionalNavigation />
-        <main className="container mx-auto px-4 py-8">
-          {children}
-        </main>
+        <AuthProvider>
+          <ConditionalNavigation />
+          <main className="container mx-auto px-4 py-8 pt-16">
+            {children}
+          </main>
+        </AuthProvider>
         <Analytics />
       </body>
     </html>

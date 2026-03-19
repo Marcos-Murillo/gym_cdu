@@ -5,11 +5,10 @@ import { Navigation } from "./navigation"
 
 export function ConditionalNavigation() {
   const pathname = usePathname()
-  
-  // No mostrar navigation en la página principal
-  if (pathname === "/") {
+
+  if (pathname === "/" || pathname.startsWith("/ticket") || pathname === "/login") {
     return null
   }
-  
+
   return <Navigation />
 }

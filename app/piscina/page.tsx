@@ -1,28 +1,37 @@
 "use client"
 
 import { useState } from "react"
+import { RouteGuard } from "@/components/route-guard"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { 
-  DoorOpen, 
-  Search, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Search,
+  CheckCircle2,
+  XCircle,
   User,
   Mail,
   Phone,
   GraduationCap,
   Building2,
   Calendar,
-  Info
+  Info,
+  Waves,
 } from "lucide-react"
 import type { UserProfile, EntryRecord } from "@/lib/types"
 
-export default function EntradaPage() {
+export default function PiscinaPage() {
+  return (
+    <RouteGuard allowedRoles={["superadmin", "admin", "monitor"]} requiredEspacioOrAdmin="piscina">
+      <PiscinaContent />
+    </RouteGuard>
+  )
+}
+
+function PiscinaContent() {
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [entradas, setEntradas] = useState<EntryRecord[]>([])
@@ -38,11 +47,11 @@ export default function EntradaPage() {
     try {
       const storage = await import("@/lib/storage")
       const user = await storage.searchUserByCode(codigo)
-      
+
       if (user) {
         setUsuario(user)
         const userEntries = await storage.getEntriesByUser(user.id)
-        setEntradas(userEntries)
+        setEntradas(userEntries.filter(e => e.instalacion === "piscina"))
       } else {
         setUsuario(null)
         setEntradas([])
@@ -52,7 +61,7 @@ export default function EntradaPage() {
       console.error("Error al buscar usuario:", err)
       setError("Error al buscar el usuario. Por favor intenta de nuevo.")
     }
-    
+
     setSearching(false)
   }
 
@@ -60,16 +69,13 @@ export default function EntradaPage() {
     if (!usuario) return
 
     const storage = await import("@/lib/storage")
-    await storage.saveEntry(usuario.id, "gimnasio")
+    await storage.saveEntry(usuario.id, "piscina")
     setSuccess(true)
-    
-    // Actualizar lista de entradas
-    const userEntries = await storage.getEntriesByUser(usuario.id)
-    setEntradas(userEntries)
 
-    setTimeout(() => {
-      setSuccess(false)
-    }, 3000)
+    const userEntries = await storage.getEntriesByUser(usuario.id)
+    setEntradas(userEntries.filter(e => e.instalacion === "piscina"))
+
+    setTimeout(() => setSuccess(false), 3000)
   }
 
   const handleReset = () => {
@@ -83,15 +89,15 @@ export default function EntradaPage() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Registro de Entrada</h1>
-        <p className="text-muted-foreground">Busca por documento, nombre o codigo estudiantil para registrar tu entrada al gimnasio</p>
+        <h1 className="text-3xl font-bold text-foreground">Registro de Entrada - Piscina</h1>
+        <p className="text-muted-foreground">Busca por documento, nombre o codigo estudiantil para registrar tu entrada a la piscina</p>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-              <DoorOpen className="h-5 w-5 text-blue-600" />
+            <div className="h-10 w-10 rounded-lg bg-cyan-100 flex items-center justify-center">
+              <Waves className="h-5 w-5 text-cyan-600" />
             </div>
             <div>
               <CardTitle className="text-xl">Buscar Usuario</CardTitle>
@@ -100,9 +106,9 @@ export default function EntradaPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert className="bg-blue-50 border-blue-200">
-            <Info className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800">
+          <Alert className="bg-cyan-50 border-cyan-200">
+            <Info className="h-4 w-4 text-cyan-600" />
+            <AlertDescription className="text-cyan-800">
               Puedes buscar por numero de documento, nombre completo o codigo estudiantil
             </AlertDescription>
           </Alert>
@@ -119,10 +125,10 @@ export default function EntradaPage() {
                 className="text-lg h-12"
               />
             </div>
-            <Button 
-              onClick={handleSearch} 
-              disabled={!codigo || searching} 
-              className="bg-blue-600 hover:bg-blue-700 h-12 px-6"
+            <Button
+              onClick={handleSearch}
+              disabled={!codigo || searching}
+              className="bg-cyan-600 hover:bg-cyan-700 h-12 px-6"
             >
               <Search className="h-5 w-5 mr-2" />
               Buscar
@@ -143,11 +149,11 @@ export default function EntradaPage() {
           )}
 
           {success && (
-            <Alert className="border-emerald-200 bg-emerald-50">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <AlertTitle className="text-emerald-800">Entrada Registrada</AlertTitle>
-              <AlertDescription className="text-emerald-700">
-                Tu entrada al gimnasio ha sido registrada exitosamente.
+            <Alert className="border-cyan-200 bg-cyan-50">
+              <CheckCircle2 className="h-4 w-4 text-cyan-600" />
+              <AlertTitle className="text-cyan-800">Entrada Registrada</AlertTitle>
+              <AlertDescription className="text-cyan-700">
+                Tu entrada a la piscina ha sido registrada exitosamente.
               </AlertDescription>
             </Alert>
           )}
@@ -159,15 +165,15 @@ export default function EntradaPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center">
-                  <User className="h-6 w-6 text-emerald-600" />
+                <div className="h-12 w-12 rounded-full bg-cyan-100 flex items-center justify-center">
+                  <User className="h-6 w-6 text-cyan-600" />
                 </div>
                 <div>
                   <CardTitle className="text-xl">{usuario.nombres}</CardTitle>
                   <CardDescription>Usuario registrado</CardDescription>
                 </div>
               </div>
-              <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+              <Badge variant="secondary" className="bg-cyan-100 text-cyan-700">
                 Activo
               </Badge>
             </div>
@@ -205,13 +211,13 @@ export default function EntradaPage() {
             </div>
 
             <div className="flex justify-center">
-              <Button 
-                onClick={handleRegisterEntry} 
-                size="lg" 
-                className="bg-emerald-600 hover:bg-emerald-700 px-8"
+              <Button
+                onClick={handleRegisterEntry}
+                size="lg"
+                className="bg-cyan-600 hover:bg-cyan-700 px-8"
               >
-                <DoorOpen className="h-5 w-5 mr-2" />
-                Registrar Entrada
+                <Waves className="h-5 w-5 mr-2" />
+                Registrar Entrada Piscina
               </Button>
             </div>
 
@@ -219,12 +225,12 @@ export default function EntradaPage() {
               <div className="space-y-3">
                 <h3 className="font-semibold text-foreground flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  Ultimas Entradas
+                  Ultimas Entradas a la Piscina
                 </h3>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {entradas.slice(-10).reverse().map((entrada) => (
-                    <div 
-                      key={entrada.id} 
+                    <div
+                      key={entrada.id}
                       className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                     >
                       <span className="text-sm">{entrada.fecha}</span>

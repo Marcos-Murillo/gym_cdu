@@ -1,17 +1,21 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { RouteGuard } from "@/components/route-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { 
-  Users, 
-  DoorOpen, 
-  UserCheck, 
+import { Button } from "@/components/ui/button"
+import {
+  Users,
+  DoorOpen,
+  UserCheck,
   TrendingUp,
   Building2,
   GraduationCap,
   Clock,
-  Calendar
+  Calendar,
+  Dumbbell,
+  Waves,
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
 import type { AttendanceStats } from "@/lib/types"
@@ -28,23 +32,38 @@ import {
   Cell,
   LineChart,
   Line,
-  Legend
+  Legend,
 } from "recharts"
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
+type Filtro = "todas" | "gimnasio" | "piscina"
+
 export default function EstadisticasPage() {
+  return (
+    <RouteGuard allowedRoles={["superadmin", "admin", "encargado"]}>
+      <EstadisticasContent />
+    </RouteGuard>
+  )
+}
+
+function EstadisticasContent() {
   const [stats, setStats] = useState<AttendanceStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [filtro, setFiltro] = useState<Filtro>("todas")
 
   useEffect(() => {
     const loadStats = async () => {
-      const data = await generateStats()
+      setLoading(true)
+      const instalacion = filtro === "todas" ? undefined : filtro
+      const data = await generateStats(instalacion)
       setStats(data)
       setLoading(false)
     }
     loadStats()
-  }, [])
+  }, [filtro])
+
+  const accentColor = filtro === "piscina" ? "cyan" : "emerald"
 
   if (loading) {
     return (
@@ -72,8 +91,35 @@ export default function EstadisticasPage() {
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Estadisticas del Gimnasio</h1>
+        <h1 className="text-3xl font-bold text-foreground">Estadisticas Generales</h1>
         <p className="text-muted-foreground">Resumen de usuarios y entradas registradas</p>
+      </div>
+
+      {/* Filtro de instalacion */}
+      <div className="flex justify-center gap-2">
+        <Button
+          variant={filtro === "todas" ? "default" : "outline"}
+          onClick={() => setFiltro("todas")}
+          className={filtro === "todas" ? "bg-slate-700 hover:bg-slate-800" : ""}
+        >
+          Todas
+        </Button>
+        <Button
+          variant={filtro === "gimnasio" ? "default" : "outline"}
+          onClick={() => setFiltro("gimnasio")}
+          className={filtro === "gimnasio" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+        >
+          <Dumbbell className="h-4 w-4 mr-2" />
+          Gimnasio
+        </Button>
+        <Button
+          variant={filtro === "piscina" ? "default" : "outline"}
+          onClick={() => setFiltro("piscina")}
+          className={filtro === "piscina" ? "bg-cyan-600 hover:bg-cyan-700" : ""}
+        >
+          <Waves className="h-4 w-4 mr-2" />
+          Piscina
+        </Button>
       </div>
 
       {/* Cards de resumen */}
@@ -99,53 +145,86 @@ export default function EstadisticasPage() {
                 <DoorOpen className="h-6 w-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Entradas</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {filtro === "todas" ? "Total Entradas" : filtro === "gimnasio" ? "Entradas Gimnasio" : "Entradas Piscina"}
+                </p>
                 <p className="text-3xl font-bold text-foreground">{stats.totalEntradas}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
-                <UserCheck className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Promedio Diario</p>
-                <p className="text-3xl font-bold text-foreground">
-                  {stats.entradasPorDia.length > 0 
-                    ? Math.round(stats.totalEntradas / stats.entradasPorDia.length) 
-                    : 0}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-purple-100 flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Hora Pico</p>
-                <p className="text-3xl font-bold text-foreground">
-                  {stats.entradasPorHora.length > 0
-                    ? stats.entradasPorHora.reduce((a, b) => a.cantidad > b.cantidad ? a : b).hora
-                    : "N/A"}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {filtro === "todas" ? (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-emerald-100 flex items-center justify-center">
+                    <Dumbbell className="h-6 w-6 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Gimnasio</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.totalGimnasio}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-cyan-100 flex items-center justify-center">
+                    <Waves className="h-6 w-6 text-cyan-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Piscina</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.totalPiscina}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <UserCheck className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Promedio Diario</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.entradasPorDia.length > 0
+                        ? Math.round(stats.totalEntradas / stats.entradasPorDia.length)
+                        : 0}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-purple-100 flex items-center justify-center">
+                    <TrendingUp className="h-6 w-6 text-purple-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Hora Pico</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.entradasPorHora.length > 0
+                        ? stats.entradasPorHora.reduce((a, b) => a.cantidad > b.cantidad ? a : b).hora
+                        : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Graficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Distribucion por Genero */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -176,14 +255,11 @@ export default function EstadisticasPage() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                No hay datos disponibles
-              </div>
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">No hay datos disponibles</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Distribucion por Estamento */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -204,14 +280,11 @@ export default function EstadisticasPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                No hay datos disponibles
-              </div>
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">No hay datos disponibles</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Entradas por Dia */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -225,18 +298,18 @@ export default function EstadisticasPage() {
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={stats.entradasPorDia}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="fecha" 
+                  <XAxis
+                    dataKey="fecha"
                     tick={{ fontSize: 10 }}
                     tickFormatter={(value: string) => value.slice(5)}
                   />
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="cantidad" 
-                    stroke="#3b82f6" 
+                  <Line
+                    type="monotone"
+                    dataKey="cantidad"
+                    stroke={filtro === "piscina" ? "#0891b2" : "#3b82f6"}
                     strokeWidth={2}
                     dot={{ r: 4 }}
                     name="Entradas"
@@ -244,14 +317,11 @@ export default function EstadisticasPage() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                No hay datos disponibles
-              </div>
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">No hay datos disponibles</div>
             )}
           </CardContent>
         </Card>
 
-        {/* Entradas por Hora */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -272,15 +342,12 @@ export default function EstadisticasPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
-                No hay datos disponibles
-              </div>
+              <div className="flex items-center justify-center h-[250px] text-muted-foreground">No hay datos disponibles</div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabla de Facultades */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -294,8 +361,8 @@ export default function EstadisticasPage() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={facultadData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   tick={{ fontSize: 10 }}
                   angle={-45}
                   textAnchor="end"
@@ -307,14 +374,11 @@ export default function EstadisticasPage() {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
-              No hay datos disponibles
-            </div>
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">No hay datos disponibles</div>
           )}
         </CardContent>
       </Card>
 
-      {/* Tabla de Programas */}
       {Object.keys(stats.porPrograma).length > 0 && (
         <Card>
           <CardHeader>
@@ -330,14 +394,12 @@ export default function EstadisticasPage() {
                 .sort(([, a], [, b]) => b - a)
                 .slice(0, 12)
                 .map(([programa, cantidad]) => (
-                  <div 
+                  <div
                     key={programa}
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                   >
                     <span className="text-sm font-medium truncate flex-1">{programa}</span>
-                    <Badge variant="secondary" className="ml-2">
-                      {cantidad}
-                    </Badge>
+                    <Badge variant="secondary" className="ml-2">{cantidad}</Badge>
                   </div>
                 ))}
             </div>

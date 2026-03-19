@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { RouteGuard } from "@/components/route-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -39,6 +40,14 @@ import {
 } from "recharts"
 
 export default function BiometricoPage() {
+  return (
+    <RouteGuard allowedRoles={["superadmin", "admin", "monitor", "encargado"]} requiredEspacioOrAdmin="gimnasio">
+      <BiometricoContent />
+    </RouteGuard>
+  )
+}
+
+function BiometricoContent() {
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [historial, setHistorial] = useState<BiometricData[]>([])

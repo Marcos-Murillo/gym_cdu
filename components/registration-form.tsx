@@ -28,21 +28,33 @@ export function RegistrationForm() {
     estamento: "",
     facultad: "",
     programaAcademico: "",
+    codigoEstudiantil: "",
   })
 
   const requiresAcademicInfo = formData.estamento === "ESTUDIANTE" || formData.estamento === "EGRESADO" || formData.estamento === "DOCENTE"
+  const requiresCodigoEstudiantil = formData.estamento === "ESTUDIANTE" || formData.estamento === "EGRESADO"
   const totalSteps = requiresAcademicInfo ? 3 : 2
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => {
       const newData = { ...prev, [field]: value }
+      
+      // Limpiar programa cuando cambia la facultad
       if (field === "facultad") {
         newData.programaAcademico = ""
       }
-      if (field === "estamento" && !["ESTUDIANTE", "EGRESADO", "DOCENTE"].includes(value)) {
-        newData.facultad = ""
-        newData.programaAcademico = ""
+      
+      // Limpiar campos académicos cuando el estamento no los requiere
+      if (field === "estamento") {
+        if (!["ESTUDIANTE", "EGRESADO", "DOCENTE"].includes(value)) {
+          newData.facultad = ""
+          newData.programaAcademico = ""
+        }
+        if (!["ESTUDIANTE", "EGRESADO"].includes(value)) {
+          newData.codigoEstudiantil = ""
+        }
       }
+      
       return newData
     })
   }
@@ -63,7 +75,9 @@ export function RegistrationForm() {
         return !!formData.estamento
       case 3:
         if (requiresAcademicInfo) {
-          return !!(formData.facultad && formData.programaAcademico)
+          const hasAcademicInfo = !!(formData.facultad && formData.programaAcademico)
+          const hasCodigoIfRequired = !requiresCodigoEstudiantil || !!formData.codigoEstudiantil
+          return hasAcademicInfo && hasCodigoIfRequired
         }
         return true
       default:
@@ -98,8 +112,8 @@ export function RegistrationForm() {
         return
       }
 
-      // Guardar usuario
-      await saveUser({
+      // Preparar datos del usuario
+      const userData: any = {
         nombres: formData.nombres,
         correo: formData.correo,
         genero: formData.genero,
@@ -110,7 +124,15 @@ export function RegistrationForm() {
         estamento: formData.estamento,
         facultad: formData.facultad || "N/A",
         programaAcademico: formData.programaAcademico || "N/A",
-      })
+      }
+      
+      // Solo agregar código estudiantil si tiene valor
+      if (formData.codigoEstudiantil && formData.codigoEstudiantil.trim()) {
+        userData.codigoEstudiantil = formData.codigoEstudiantil.trim()
+      }
+      
+      // Guardar usuario
+      await saveUser(userData)
 
       setSuccess(true)
     } catch (err) {
@@ -132,6 +154,7 @@ export function RegistrationForm() {
       estamento: "",
       facultad: "",
       programaAcademico: "",
+      codigoEstudiantil: "",
     })
     setCurrentStep(1)
     setSuccess(false)
@@ -318,9 +341,26 @@ export function RegistrationForm() {
         {currentStep === 3 && requiresAcademicInfo && (
           <div className="space-y-4">
             <h3 className="font-semibold text-foreground">Informacion Academica</h3>
+            
+            {requiresCodigoEstudiantil && (
+              <div className="space-y-2">
+                <Label htmlFor="codigoEstudiantil">Codigo Estudiantil *</Label>
+                <Input
+                  id="codigoEstudiantil"
+                  value={formData.codigoEstudiantil}
+                  onChange={(e) => handleInputChange("codigoEstudiantil", e.target.value)}
+                  placeholder="Ingresa tu codigo estudiantil"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="facultad">Facultad *</Label>
-              <Select value={formData.facultad} onValueChange={(value) => handleInputChange("facultad", value)}>
+              <Select 
+                key={`facultad-${formData.estamento}`}
+                value={formData.facultad} 
+                onValueChange={(value) => handleInputChange("facultad", value)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona tu facultad" />
                 </SelectTrigger>
@@ -338,6 +378,7 @@ export function RegistrationForm() {
               <div className="space-y-2">
                 <Label htmlFor="programaAcademico">Programa Academico *</Label>
                 <Select
+                  key={`programa-${formData.facultad}`}
                   value={formData.programaAcademico}
                   onValueChange={(value) => handleInputChange("programaAcademico", value)}
                 >

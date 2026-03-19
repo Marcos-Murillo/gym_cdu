@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { RouteGuard } from "@/components/route-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -8,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { 
   Users, 
   Search, 
@@ -22,19 +23,31 @@ import {
   Calendar,
   X,
   MoreVertical,
-  Eye
+  Eye,
+  Trash2
 } from "lucide-react"
 import { filterUsers, getUsers } from "@/lib/storage"
 import { ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import type { UserProfile } from "@/lib/types"
 
 export default function UsuariosPage() {
+  return (
+    <RouteGuard allowedRoles={["superadmin", "admin"]}>
+      <UsuariosContent />
+    </RouteGuard>
+  )
+}
+
+function UsuariosContent() {
   const [usuarios, setUsuarios] = useState<UserProfile[]>([])
   const [filteredUsuarios, setFilteredUsuarios] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   // Filtros
   const [nombre, setNombre] = useState("")
@@ -75,6 +88,60 @@ export default function UsuariosPage() {
   const handleViewUser = (usuario: UserProfile) => {
     setSelectedUser(usuario)
     setDialogOpen(true)
+  }
+
+  const handleDeleteClick = (usuario: UserProfile) => {
+    // Cerrar el diálogo de vista si está abierto
+    if (dialogOpen) {
+      setDialogOpen(false)
+      setSelectedUser(null)
+    }
+    
+    // Esperar a que se cierre completamente antes de abrir el de eliminación
+    setTimeout(() => {
+      setUserToDelete(usuario)
+      setDeleteDialogOpen(true)
+    }, 150)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!userToDelete) return
+    
+    setDeleting(true)
+    try {
+      // Eliminar usuario completamente de la base de datos usando deleteDoc directamente
+      const { deleteDoc, doc } = await import("firebase/firestore")
+      const { db } = await import("@/lib/firebase")
+      const docRef = doc(db, "users", userToDelete.id)
+      await deleteDoc(docRef)
+      
+      // Cerrar el diálogo y limpiar estado
+      setDeleteDialogOpen(false)
+      
+      // Esperar a que el diálogo se cierre antes de actualizar la lista
+      setTimeout(async () => {
+        setUserToDelete(null)
+        
+        // Recargar usuarios
+        const users = await getUsers()
+        setUsuarios(users)
+        
+        // Aplicar filtros nuevamente
+        const filtered = await filterUsers({
+          nombre,
+          estamento: estamento || undefined,
+          facultad: facultad || undefined,
+          programa: programa || undefined,
+        })
+        setFilteredUsuarios(filtered)
+      }, 150)
+    } catch (error) {
+      console.error("Error al eliminar usuario:", error)
+      setDeleteDialogOpen(false)
+      setUserToDelete(null)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   const hasActiveFilters = nombre || estamento || facultad || programa
@@ -238,6 +305,9 @@ export default function UsuariosPage() {
                         <div className="min-w-0">
                           <p className="font-medium text-foreground">{usuario.nombres}</p>
                           <div className="text-sm text-muted-foreground space-y-0.5">
+                            {usuario.codigoEstudiantil && (
+                              <p className="font-mono text-xs text-emerald-600">Código: {usuario.codigoEstudiantil}</p>
+                            )}
                             {usuario.facultad && usuario.facultad !== "N/A" && (
                               <p className="truncate">{usuario.facultad.replace("FACULTAD DE ", "")}</p>
                             )}
@@ -268,6 +338,14 @@ export default function UsuariosPage() {
                           <DropdownMenuItem onClick={() => handleViewUser(usuario)}>
                             <Eye className="h-4 w-4 mr-2" />
                             Ver usuario
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteClick(usuario)}
+                            className="text-red-600 focus:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Eliminar usuario
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -304,7 +382,7 @@ export default function UsuariosPage() {
       )}
 
       {/* Dialog para ver detalles del usuario */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog key={`view-${selectedUser?.id || 'none'}`} open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Detalles del Usuario</DialogTitle>
@@ -359,6 +437,13 @@ export default function UsuariosPage() {
                   <p className="text-sm font-mono">{selectedUser.numeroDocumento}</p>
                 </div>
 
+                {selectedUser.codigoEstudiantil && (
+                  <div className="space-y-1 md:col-span-2">
+                    <Label className="text-muted-foreground">Codigo Estudiantil</Label>
+                    <p className="text-sm font-mono text-emerald-600">{selectedUser.codigoEstudiantil}</p>
+                  </div>
+                )}
+
                 {selectedUser.facultad && selectedUser.facultad !== "N/A" && (
                   <div className="space-y-1 md:col-span-2">
                     <Label className="text-muted-foreground">Facultad</Label>
@@ -397,6 +482,47 @@ export default function UsuariosPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para eliminar */}
+      <Dialog key={`delete-${userToDelete?.id || 'none'}`} open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Eliminar Usuario</DialogTitle>
+            <DialogDescription>
+              ¿Estás seguro de que deseas eliminar este usuario? Esta acción no se puede deshacer y se eliminará permanentemente de la base de datos.
+            </DialogDescription>
+          </DialogHeader>
+          {userToDelete && (
+            <div className="py-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
+                <div className="h-10 w-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <User className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <p className="font-medium">{userToDelete.nombres}</p>
+                  <p className="text-sm text-muted-foreground">{userToDelete.correo}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={deleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteConfirm}
+              disabled={deleting}
+            >
+              {deleting ? "Eliminando..." : "Eliminar Permanentemente"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
