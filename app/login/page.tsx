@@ -53,7 +53,12 @@ export default function LoginPage() {
       } else {
         saveSession(result)
         refresh()
-        router.replace(getRedirectPath(result))
+        // Si es monitor, redirigir a asistencia con aviso
+        if (result.rol === "monitor") {
+          router.replace("/asistencia?nuevo=1")
+        } else {
+          router.replace(getRedirectPath(result))
+        }
       }
     } catch {
       setError("Error al iniciar sesión. Intenta de nuevo.")

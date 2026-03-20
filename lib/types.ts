@@ -75,6 +75,19 @@ export interface LockerRecord {
   fechaIngreso: string
   horaIngreso: string
   estado: "ocupado" | "libre"
+  motivoLiberacion?: string
+  fechaLiberacion?: string
+}
+
+export interface AttendanceRecord {
+  id: string
+  monitorId: string
+  monitorNombre: string
+  espacio: string
+  fecha: string
+  horaEntrada: string
+  horaSalida?: string
+  duracionMinutos?: number
 }
 
 export interface AttendanceStats {

@@ -12,7 +12,7 @@ import {
   Timestamp
 } from "firebase/firestore"
 import { db } from "./firebase"
-import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord } from "./types"
+import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord } from "./types"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -26,6 +26,11 @@ export async function getUsers(): Promise<UserProfile[]> {
     id: doc.id,
     ...doc.data()
   })) as UserProfile[]
+}
+
+export async function getSystemUsers() {
+  const { getSystemUsers: _get } = await import("./auth")
+  return _get()
 }
 
 export async function saveUser(user: Omit<UserProfile, "id" | "fechaRegistro" | "activo">): Promise<UserProfile> {
@@ -308,9 +313,13 @@ export async function createLockerRecord(casillero: string, usuarioId: string): 
   return { ...record, id: docRef.id }
 }
 
-export async function releaseLocker(id: string): Promise<void> {
+export async function releaseLocker(id: string, motivo?: string): Promise<void> {
   const docRef = doc(db, LOCKERS_COLLECTION, id)
-  await updateDoc(docRef, { estado: "libre" })
+  await updateDoc(docRef, {
+    estado: "libre",
+    motivoLiberacion: motivo ?? "liberado manualmente",
+    fechaLiberacion: new Date().toISOString(),
+  })
 }
 
 export async function validateLockerToken(casillero: string, token: string): Promise<LockerRecord | null> {
@@ -319,4 +328,57 @@ export async function validateLockerToken(casillero: string, token: string): Pro
     l => l.casillero === casillero && l.token.toUpperCase() === token.toUpperCase()
   )
   return match ?? null
+}
+
+export async function getAllLockers(): Promise<LockerRecord[]> {
+  const snap = await getDocs(collection(db, LOCKERS_COLLECTION))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as LockerRecord[]
+}
+
+// === ASISTENCIA MONITORES ===
+const ATTENDANCE_COLLECTION = "monitorAttendance"
+
+export async function getAttendanceRecords(): Promise<AttendanceRecord[]> {
+  const snap = await getDocs(collection(db, ATTENDANCE_COLLECTION))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as AttendanceRecord[]
+}
+
+export async function getTodayAttendance(monitorId: string): Promise<AttendanceRecord | null> {
+  const today = new Date().toISOString().split("T")[0]
+  const q = query(
+    collection(db, ATTENDANCE_COLLECTION),
+    where("monitorId", "==", monitorId),
+    where("fecha", "==", today)
+  )
+  const snap = await getDocs(q)
+  if (snap.empty) return null
+  const d = snap.docs[0]
+  return { id: d.id, ...d.data() } as AttendanceRecord
+}
+
+export async function registerAttendanceEntry(monitorId: string, monitorNombre: string, espacio: string): Promise<AttendanceRecord> {
+  const now = new Date()
+  const record = {
+    monitorId,
+    monitorNombre,
+    espacio,
+    fecha: now.toISOString().split("T")[0],
+    horaEntrada: now.toTimeString().slice(0, 5),
+  }
+  const ref = await addDoc(collection(db, ATTENDANCE_COLLECTION), record)
+  return { ...record, id: ref.id }
+}
+
+export async function registerAttendanceExit(id: string): Promise<void> {
+  const docRef = doc(db, ATTENDANCE_COLLECTION, id)
+  const snap = await getDoc(docRef)
+  if (!snap.exists()) return
+  const data = snap.data() as AttendanceRecord
+  const now = new Date()
+  const horaSalida = now.toTimeString().slice(0, 5)
+  // calcular duración
+  const [eh, em] = data.horaEntrada.split(":").map(Number)
+  const [sh, sm] = horaSalida.split(":").map(Number)
+  const duracionMinutos = (sh * 60 + sm) - (eh * 60 + em)
+  await updateDoc(docRef, { horaSalida, duracionMinutos: Math.max(0, duracionMinutos) })
 }
