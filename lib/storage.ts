@@ -175,6 +175,11 @@ export async function saveBiometricData(data: Omit<BiometricData, "id" | "fecha"
   } as BiometricData
 }
 
+export async function updateBiometricData(id: string, data: Partial<Omit<BiometricData, "id">>): Promise<void> {
+  const docRef = doc(db, BIOMETRIC_COLLECTION, id)
+  await updateDoc(docRef, data)
+}
+
 export async function getBiometricByUser(usuarioId: string): Promise<BiometricData[]> {
   const q = query(collection(db, BIOMETRIC_COLLECTION), where("usuarioId", "==", usuarioId))
   const querySnapshot = await getDocs(q)

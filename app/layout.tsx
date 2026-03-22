@@ -41,7 +41,7 @@ export default function RootLayout({
       <body className="font-sans antialiased min-h-screen bg-background">
         <AuthProvider>
           <ConditionalNavigation />
-          <main className="container mx-auto px-4 py-8 pt-16">
+          <main className="pl-20 container mx-auto px-4 py-8 pt-8">
             {children}
           </main>
         </AuthProvider>
