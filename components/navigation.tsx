@@ -32,15 +32,16 @@ const espaciosItems: NavItem[] = [
 ]
 
 const adminItems: NavItem[] = [
-  { href: "/estadisticas",           label: "Estadísticas",          icon: BarChart3,    roles: ["superadmin", "admin", "encargado"] },
+  { href: "/estadisticas",           label: "Estadísticas",          icon: BarChart3,    roles: ["superadmin", "admin"] },
   { href: "/guardarropas/historial", label: "Historial casilleros",  icon: ClipboardList,roles: ["superadmin", "admin"] },
-  { href: "/asistencia/seguimiento", label: "Seguimiento asistencia",icon: CalendarCheck,roles: ["encargado"] },
+  { href: "/asistencia/seguimiento", label: "Seguimiento asistencia",icon: CalendarCheck,roles: ["superadmin", "admin"] },
   { href: "/usuarios",               label: "Usuarios",              icon: Users,        roles: ["superadmin", "admin"] },
   { href: "/admin",                  label: "Panel Admin",           icon: UserCog,      roles: ["superadmin", "admin"] },
   { href: "/superadmin",             label: "Super Admin",           icon: ShieldCheck,  roles: ["superadmin"] },
 ]
 
 function canSeeItem(item: NavItem, userRole: UserRole, userEspacio?: Espacio): boolean {
+  if (!item.roles.includes(userRole)) return false
   if (item.espacio) {
     if (userRole === "superadmin" || userRole === "admin") return true
     return userEspacio === item.espacio
