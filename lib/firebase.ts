@@ -2,13 +2,12 @@ import { initializeApp, getApps } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD7Uh9NfNLELcOZOzXGmGJYC5Wp7cphzOE",
-  authDomain: "gymcdu.firebaseapp.com",
-  projectId: "gymcdu",
-  storageBucket: "gymcdu.firebasestorage.app",
-  messagingSenderId: "620263926048",
-  appId: "1:620263926048:web:f6bb920d6f16f839b64f45",
-  measurementId: "G-ZCGMR1M970"
+  apiKey: "AIzaSyCLgovaXfshvbwyGM-v970AkDiE73Vo0a4",
+  authDomain: "espacioscdu.firebaseapp.com",
+  projectId: "espacioscdu",
+  storageBucket: "espacioscdu.firebasestorage.app",
+  messagingSenderId: "547238322401",
+  appId: "1:547238322401:web:75e6bb9d40cfba6efb97a0",
 }
 
 // Initialize Firebase
