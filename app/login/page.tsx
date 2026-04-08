@@ -74,7 +74,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen px-4 py-8">
+    <div className="fixed inset-0 flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm sm:max-w-md">
         <CardHeader className="text-center space-y-3 pb-4">
           <div className="flex justify-center">
@@ -85,7 +85,7 @@ export default function LoginPage() {
           <CardTitle className="text-3xl sm:text-2xl">GymControl</CardTitle>
           <CardDescription className="text-base sm:text-sm">Ingresa tus credenciales para continuar</CardDescription>
         </CardHeader>
-        <CardContent className="px-6 sm:px-6">
+        <CardContent className="px-6">
           <form onSubmit={handleLogin} className="space-y-5 sm:space-y-4">
             <div className="space-y-2">
               <Label htmlFor="cedula" className="text-base sm:text-sm">Cédula</Label>
