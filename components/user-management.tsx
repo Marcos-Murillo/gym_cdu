@@ -52,12 +52,17 @@ export function UserManagement({ title }: UserManagementProps) {
   const needsEspacio = ROLES_CON_ESPACIO.includes(rol as UserRole)
 
   const loadUsers = async () => {
-    const all = await getSystemUsers()
-    // superadmin ve todos, admin no ve superadmins
-    if (currentUser?.rol === "admin") {
-      setUsers(all.filter(u => u.rol !== "superadmin"))
-    } else {
-      setUsers(all)
+    try {
+      const all = await getSystemUsers()
+      // superadmin ve todos, admin no ve superadmins
+      if (currentUser?.rol === "admin") {
+        setUsers(all.filter(u => u.rol !== "superadmin"))
+      } else {
+        setUsers(all)
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(`Error al cargar usuarios: ${msg}`)
     }
   }
 
@@ -97,8 +102,14 @@ export function UserManagement({ title }: UserManagementProps) {
       resetForm()
       loadUsers()
       setTimeout(() => setSuccess(""), 3000)
-    } catch {
-      setError("Error al crear el usuario.")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // Firestore permission-denied es el error más común
+      if (msg.includes("permission-denied") || msg.includes("Missing or insufficient permissions")) {
+        setError("Sin permisos en Firestore. Revisa las reglas de seguridad del proyecto.")
+      } else {
+        setError(`Error al crear el usuario: ${msg}`)
+      }
     }
     setLoading(false)
   }

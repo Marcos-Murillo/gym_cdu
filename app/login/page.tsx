@@ -33,7 +33,9 @@ export default function LoginPage() {
   const { user, refresh } = useAuth()
 
   useEffect(() => {
-    ensureSuperAdmin()
+    ensureSuperAdmin().catch(() => {
+      // Si falla (ej: permisos Firestore), no bloquear el login
+    })
   }, [])
 
   useEffect(() => {
@@ -60,54 +62,62 @@ export default function LoginPage() {
           router.replace(getRedirectPath(result))
         }
       }
-    } catch {
-      setError("Error al iniciar sesión. Intenta de nuevo.")
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (msg.includes("permission-denied") || msg.includes("Missing or insufficient permissions")) {
+        setError("Error de permisos en la base de datos. Contacta al administrador.")
+      } else {
+        setError(`Error al iniciar sesión: ${msg}`)
+      }
     }
     setLoading(false)
   }
 
   return (
-    <div className="flex items-center justify-center min-h-[80vh]">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center space-y-3">
+    <div className="flex items-center justify-center min-h-screen px-4 py-8">
+      <Card className="w-full max-w-sm sm:max-w-md">
+        <CardHeader className="text-center space-y-3 pb-4">
           <div className="flex justify-center">
-            <div className="h-12 w-12 rounded-xl bg-emerald-600 flex items-center justify-center">
-              <Dumbbell className="h-7 w-7 text-white" />
+            <div className="h-14 w-14 sm:h-12 sm:w-12 rounded-xl bg-emerald-600 flex items-center justify-center">
+              <Dumbbell className="h-8 w-8 sm:h-7 sm:w-7 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">GymControl</CardTitle>
-          <CardDescription>Ingresa tus credenciales para continuar</CardDescription>
+          <CardTitle className="text-3xl sm:text-2xl">GymControl</CardTitle>
+          <CardDescription className="text-base sm:text-sm">Ingresa tus credenciales para continuar</CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+        <CardContent className="px-6 sm:px-6">
+          <form onSubmit={handleLogin} className="space-y-5 sm:space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="cedula">Cédula</Label>
+              <Label htmlFor="cedula" className="text-base sm:text-sm">Cédula</Label>
               <Input
                 id="cedula"
                 value={cedula}
                 onChange={e => setCedula(e.target.value)}
                 placeholder="Número de cédula"
+                className="h-12 sm:h-10 text-base sm:text-sm"
+                inputMode="numeric"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password" className="text-base sm:text-sm">Contraseña</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="Contraseña"
+                className="h-12 sm:h-10 text-base sm:text-sm"
                 required
               />
             </div>
             {error && (
               <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-sm">{error}</AlertDescription>
               </Alert>
             )}
-            <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={loading}>
-              <LogIn className="h-4 w-4 mr-2" />
+            <Button type="submit" className="w-full h-12 sm:h-10 text-base sm:text-sm bg-emerald-600 hover:bg-emerald-700" disabled={loading}>
+              <LogIn className="h-5 w-5 sm:h-4 sm:w-4 mr-2" />
               {loading ? "Ingresando..." : "Ingresar"}
             </Button>
           </form>

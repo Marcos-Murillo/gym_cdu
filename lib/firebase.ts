@@ -2,12 +2,12 @@ import { initializeApp, getApps } from "firebase/app"
 import { getFirestore } from "firebase/firestore"
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCLgovaXfshvbwyGM-v970AkDiE73Vo0a4",
-  authDomain: "espacioscdu.firebaseapp.com",
-  projectId: "espacioscdu",
-  storageBucket: "espacioscdu.firebasestorage.app",
-  messagingSenderId: "547238322401",
-  appId: "1:547238322401:web:75e6bb9d40cfba6efb97a0",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyCLgovaXfshvbwyGM-v970AkDiE73Vo0a4",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "espacioscdu.firebaseapp.com",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "espacioscdu",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "espacioscdu.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "547238322401",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:547238322401:web:75e6bb9d40cfba6efb97a0",
 }
 
 // Initialize Firebase
