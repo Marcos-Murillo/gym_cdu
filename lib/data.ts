@@ -1,5 +1,11 @@
 // Datos de referencia para el sistema
+// Labels para mostrar en UI → valores internos se mantienen para no romper estadísticas
 export const GENEROS = ["MUJER", "HOMBRE", "OTRO"] as const
+export const GENEROS_LABELS: Record<string, string> = {
+  MUJER: "Femenino",
+  HOMBRE: "Masculino",
+  OTRO: "Otro",
+}
 
 export const ETNIAS = [
   "AFRO",

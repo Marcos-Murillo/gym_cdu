@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CheckCircle2, UserPlus, ChevronRight, ChevronLeft, Loader2 } from "lucide-react"
-import { GENEROS, TIPOS_DOCUMENTO, ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
+import { GENEROS, GENEROS_LABELS, TIPOS_DOCUMENTO, ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import { saveUser, getUserByDocument } from "@/lib/storage"
 import type { FormData } from "@/lib/types"
 
@@ -65,6 +65,7 @@ export function RegistrationForm() {
         return !!(
           formData.nombres &&
           formData.correo &&
+          /^[^\s@]+@correounivalle\.edu\.co$/.test(formData.correo) &&
           formData.genero &&
           formData.tipoDocumento &&
           formData.numeroDocumento &&
@@ -76,7 +77,7 @@ export function RegistrationForm() {
       case 3:
         if (requiresAcademicInfo) {
           const hasAcademicInfo = !!(formData.facultad && formData.programaAcademico)
-          const hasCodigoIfRequired = !requiresCodigoEstudiantil || !!formData.codigoEstudiantil
+          const hasCodigoIfRequired = !requiresCodigoEstudiantil || (formData.codigoEstudiantil.length === 9)
           return hasAcademicInfo && hasCodigoIfRequired
         }
         return true
@@ -234,14 +235,17 @@ export function RegistrationForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="correo">Correo Electronico *</Label>
+                <Label htmlFor="correo">Correo Institucional *</Label>
                 <Input
                   id="correo"
                   type="email"
                   value={formData.correo}
                   onChange={(e) => handleInputChange("correo", e.target.value)}
-                  placeholder="correo@ejemplo.com"
+                  placeholder="usuario@correounivalle.edu.co"
                 />
+                {formData.correo && !/^[^\s@]+@correounivalle\.edu\.co$/.test(formData.correo) && (
+                  <p className="text-xs text-destructive">Solo se permite correo @correounivalle.edu.co</p>
+                )}
               </div>
             </div>
 
@@ -255,7 +259,7 @@ export function RegistrationForm() {
                   <SelectContent>
                     {GENEROS.map((genero) => (
                       <SelectItem key={genero} value={genero}>
-                        {genero}
+                        {GENEROS_LABELS[genero]}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -344,13 +348,21 @@ export function RegistrationForm() {
             
             {requiresCodigoEstudiantil && (
               <div className="space-y-2">
-                <Label htmlFor="codigoEstudiantil">Codigo Estudiantil *</Label>
+                <Label htmlFor="codigoEstudiantil">Codigo Estudiantil * (9 dígitos, ej: 202625413)</Label>
                 <Input
                   id="codigoEstudiantil"
                   value={formData.codigoEstudiantil}
-                  onChange={(e) => handleInputChange("codigoEstudiantil", e.target.value)}
-                  placeholder="Ingresa tu codigo estudiantil"
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 9)
+                    handleInputChange("codigoEstudiantil", val)
+                  }}
+                  placeholder="202625413"
+                  maxLength={9}
+                  inputMode="numeric"
                 />
+                {formData.codigoEstudiantil && formData.codigoEstudiantil.length !== 9 && (
+                  <p className="text-xs text-destructive">El código debe tener exactamente 9 dígitos</p>
+                )}
               </div>
             )}
 

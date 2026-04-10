@@ -84,7 +84,7 @@ export default function EntradaPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Registro de Entrada</h1>
-        <p className="text-muted-foreground">Busca por documento, nombre o codigo estudiantil para registrar tu entrada al gimnasio</p>
+        <p className="text-muted-foreground">Busca por documento, nombre o código estudiantil completo (9 dígitos) para registrar tu entrada al gimnasio</p>
       </div>
 
       <Card>
@@ -103,7 +103,7 @@ export default function EntradaPage() {
           <Alert className="bg-blue-50 border-blue-200">
             <Info className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
-              Puedes buscar por numero de documento, nombre completo o codigo estudiantil
+              Puedes buscar por numero de documento, nombre completo o codigo estudiantil completo (9 dígitos, ej: 202625413)
             </AlertDescription>
           </Alert>
 
@@ -114,7 +114,7 @@ export default function EntradaPage() {
                 id="codigo"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
-                placeholder="Documento, nombre o codigo estudiantil..."
+                placeholder="Documento, nombre o código estudiantil completo (202625413)..."
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className="text-lg h-12"
               />
