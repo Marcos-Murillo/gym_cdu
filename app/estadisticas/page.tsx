@@ -188,6 +188,19 @@ function EstadisticasContent() {
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
+                  <div className={`h-12 w-12 rounded-lg ${filtro === "piscina" ? "bg-cyan-100" : "bg-emerald-100"} flex items-center justify-center`}>
+                    <Users className={`h-6 w-6 ${filtro === "piscina" ? "text-cyan-600" : "text-emerald-600"}`} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Usuarios Únicos</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.usuariosUnicos ?? 0}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
                   <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
                     <UserCheck className="h-6 w-6 text-amber-600" />
                   </div>
@@ -197,23 +210,6 @@ function EstadisticasContent() {
                       {stats.entradasPorDia.length > 0
                         ? Math.round(stats.totalEntradas / stats.entradasPorDia.length)
                         : 0}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-lg bg-purple-100 flex items-center justify-center">
-                    <TrendingUp className="h-6 w-6 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Hora Pico</p>
-                    <p className="text-3xl font-bold text-foreground">
-                      {stats.entradasPorHora.length > 0
-                        ? stats.entradasPorHora.reduce((a, b) => a.cantidad > b.cantidad ? a : b).hora
-                        : "N/A"}
                     </p>
                   </div>
                 </div>

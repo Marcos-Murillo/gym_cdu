@@ -204,6 +204,13 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
     ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
 
+  // Calcular usuarios únicos por espacio cuando se filtra
+  let usuariosUnicos: number | undefined
+  if (instalacion) {
+    const usuariosUnicosSet = new Set(entries.map(e => e.usuarioId))
+    usuariosUnicos = usuariosUnicosSet.size
+  }
+
   const porGenero: Record<string, number> = {}
   const porEstamento: Record<string, number> = {}
   const porFacultad: Record<string, number> = {}
@@ -242,6 +249,7 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
     totalEntradas: entries.length,
     totalGimnasio,
     totalPiscina,
+    usuariosUnicos,
     porGenero,
     porEstamento,
     porFacultad,
