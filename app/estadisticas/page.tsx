@@ -16,8 +16,11 @@ import {
   Calendar,
   Dumbbell,
   Waves,
+  FileDown,
+  Loader2,
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
+import { generateGymPDFReport } from "@/lib/pdf-generator"
 import type { AttendanceStats } from "@/lib/types"
 import {
   BarChart,
@@ -51,6 +54,7 @@ function EstadisticasContent() {
   const [stats, setStats] = useState<AttendanceStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Filtro>("todas")
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     const loadStats = async () => {
@@ -64,6 +68,16 @@ function EstadisticasContent() {
   }, [filtro])
 
   const accentColor = filtro === "piscina" ? "cyan" : "emerald"
+
+  const handleGeneratePDF = async () => {
+    if (!stats) return
+    setPdfLoading(true)
+    try {
+      generateGymPDFReport(stats, filtro)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -96,7 +110,7 @@ function EstadisticasContent() {
       </div>
 
       {/* Filtro de instalacion */}
-      <div className="flex justify-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2">
         <Button
           variant={filtro === "todas" ? "default" : "outline"}
           onClick={() => setFiltro("todas")}
@@ -119,6 +133,19 @@ function EstadisticasContent() {
         >
           <Waves className="h-4 w-4 mr-2" />
           Piscina
+        </Button>
+        <Button
+          variant="outline"
+          onClick={handleGeneratePDF}
+          disabled={pdfLoading}
+          className="border-rose-300 text-rose-600 hover:bg-rose-50"
+        >
+          {pdfLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4 mr-2" />
+          )}
+          Generar PDF
         </Button>
       </div>
 
