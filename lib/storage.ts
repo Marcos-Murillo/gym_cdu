@@ -213,33 +213,24 @@ export async function getBiometricByUser(usuarioId: string): Promise<BiometricDa
 export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promise<AttendanceStats> {
   const users = await getUsers()
   const allEntries = await getEntries()
+  const usageCounts = await getUserServiceUsageCounts()
 
   const totalGimnasio = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").length
   const totalPiscina = allEntries.filter(e => e.instalacion === "piscina").length
+
+  // Usuarios únicos por servicio: reutiliza getUserServiceUsageCounts igual que la página de usuarios
+  const usuariosUnicosGimnasio = Object.values(usageCounts).filter(u => u.gimnasio > 0).length
+  const usuariosUnicosPiscina  = Object.values(usageCounts).filter(u => u.piscina > 0).length
 
   // Filtrar entradas por instalacion si se especifica
   const entries = instalacion
     ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
 
-  // Calcular usuarios únicos por espacio (siempre)
-  const gimnasioEntries = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio")
-  const piscinaEntries  = allEntries.filter(e => e.instalacion === "piscina")
-
-  const usuariosUnicosGimnasio = new Set(
-    gimnasioEntries.map(e => e.usuarioId).filter(Boolean)
-  ).size
-
-  const usuariosUnicosPiscina = new Set(
-    piscinaEntries.map(e => e.usuarioId).filter(Boolean)
-  ).size
-
-  // Calcular usuarios únicos por espacio cuando se filtra
+  // Usuarios únicos del espacio filtrado
   let usuariosUnicos: number | undefined
-  if (instalacion) {
-    const filteredForUnique = instalacion === "gimnasio" ? gimnasioEntries : piscinaEntries
-    usuariosUnicos = new Set(filteredForUnique.map(e => e.usuarioId).filter(Boolean)).size
-  }
+  if (instalacion === "gimnasio") usuariosUnicos = usuariosUnicosGimnasio
+  else if (instalacion === "piscina") usuariosUnicos = usuariosUnicosPiscina
 
   const porGenero: Record<string, number> = {}
   const porEstamento: Record<string, number> = {}
