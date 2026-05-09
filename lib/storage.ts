@@ -223,18 +223,22 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
     : allEntries
 
   // Calcular usuarios únicos por espacio (siempre)
+  const gimnasioEntries = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio")
+  const piscinaEntries  = allEntries.filter(e => e.instalacion === "piscina")
+
   const usuariosUnicosGimnasio = new Set(
-    allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").map(e => e.usuarioId)
+    gimnasioEntries.map(e => e.usuarioId).filter(Boolean)
   ).size
+
   const usuariosUnicosPiscina = new Set(
-    allEntries.filter(e => e.instalacion === "piscina").map(e => e.usuarioId)
+    piscinaEntries.map(e => e.usuarioId).filter(Boolean)
   ).size
 
   // Calcular usuarios únicos por espacio cuando se filtra
   let usuariosUnicos: number | undefined
   if (instalacion) {
-    const usuariosUnicosSet = new Set(entries.map(e => e.usuarioId))
-    usuariosUnicos = usuariosUnicosSet.size
+    const filteredForUnique = instalacion === "gimnasio" ? gimnasioEntries : piscinaEntries
+    usuariosUnicos = new Set(filteredForUnique.map(e => e.usuarioId).filter(Boolean)).size
   }
 
   const porGenero: Record<string, number> = {}
