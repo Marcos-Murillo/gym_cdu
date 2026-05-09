@@ -51,9 +51,11 @@ export function generateGymPDFReport(
 
   if (filtro === "todas") {
     resumenBody.push(["Entradas gimnasio", stats.totalGimnasio.toString()])
+    resumenBody.push(["Usuarios únicos gimnasio", (stats.usuariosUnicosGimnasio ?? 0).toString()])
     resumenBody.push(["Entradas piscina", stats.totalPiscina.toString()])
-  } else if (stats.usuariosUnicos !== undefined) {
-    resumenBody.push(["Usuarios únicos en el espacio", stats.usuariosUnicos.toString()])
+    resumenBody.push(["Usuarios únicos piscina", (stats.usuariosUnicosPiscina ?? 0).toString()])
+  } else {
+    resumenBody.push(["Usuarios únicos en el espacio", (stats.usuariosUnicos ?? 0).toString()])
     if (stats.entradasPorDia.length > 0) {
       const promedio = Math.round(stats.totalEntradas / stats.entradasPorDia.length)
       resumenBody.push(["Promedio diario de entradas", promedio.toString()])

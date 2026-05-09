@@ -96,6 +96,8 @@ export interface AttendanceStats {
   totalGimnasio: number
   totalPiscina: number
   usuariosUnicos?: number // Usuarios únicos que han visitado el espacio filtrado
+  usuariosUnicosGimnasio?: number // Siempre calculado
+  usuariosUnicosPiscina?: number  // Siempre calculado
   porGenero: Record<string, number>
   porEstamento: Record<string, number>
   porFacultad: Record<string, number>

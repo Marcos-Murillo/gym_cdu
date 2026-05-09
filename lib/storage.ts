@@ -19,13 +19,27 @@ const LOCKERS_COLLECTION = "lockers"
 const ENTRIES_COLLECTION = "entries"
 const BIOMETRIC_COLLECTION = "biometric"
 
+/** Texto legacy guardado como marcador; no debe contarse en estadísticas ni mostrarse como programa real */
+function normalizeAcademicField(value: unknown): string {
+  if (value == null) return ""
+  const s = String(value).trim()
+  if (s === "" || /^n\/a$/i.test(s)) return ""
+  return s
+}
+
+function normalizeUserDoc(id: string, data: Record<string, unknown>): UserProfile {
+  return {
+    ...(data as Omit<UserProfile, "id">),
+    id,
+    facultad: normalizeAcademicField(data.facultad),
+    programaAcademico: normalizeAcademicField(data.programaAcademico),
+  }
+}
+
 // === USUARIOS ===
 export async function getUsers(): Promise<UserProfile[]> {
   const querySnapshot = await getDocs(collection(db, USERS_COLLECTION))
-  return querySnapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  })) as UserProfile[]
+  return querySnapshot.docs.map((d) => normalizeUserDoc(d.id, d.data() as Record<string, unknown>))
 }
 
 export async function getSystemUsers() {
@@ -36,14 +50,13 @@ export async function getSystemUsers() {
 export async function saveUser(user: Omit<UserProfile, "id" | "fechaRegistro" | "activo">): Promise<UserProfile> {
   const newUser = {
     ...user,
+    facultad: normalizeAcademicField(user.facultad),
+    programaAcademico: normalizeAcademicField(user.programaAcademico),
     fechaRegistro: new Date().toISOString(),
     activo: true,
   }
   const docRef = await addDoc(collection(db, USERS_COLLECTION), newUser)
-  return {
-    ...newUser,
-    id: docRef.id,
-  } as UserProfile
+  return normalizeUserDoc(docRef.id, newUser as Record<string, unknown>)
 }
 
 // Función para buscar usuario por nombre, cédula o código estudiantil
@@ -101,15 +114,20 @@ export async function getUserById(id: string): Promise<UserProfile | undefined> 
   const docRef = doc(db, USERS_COLLECTION, id)
   const docSnap = await getDoc(docRef)
   if (!docSnap.exists()) return undefined
-  return { id: docSnap.id, ...docSnap.data() } as UserProfile
+  return normalizeUserDoc(docSnap.id, docSnap.data() as Record<string, unknown>)
 }
 
 export async function updateUser(id: string, data: Partial<UserProfile>): Promise<UserProfile | null> {
   const docRef = doc(db, USERS_COLLECTION, id)
-  await updateDoc(docRef, data)
+  const payload: Partial<UserProfile> = { ...data }
+  if (data.facultad !== undefined) payload.facultad = normalizeAcademicField(data.facultad)
+  if (data.programaAcademico !== undefined) {
+    payload.programaAcademico = normalizeAcademicField(data.programaAcademico)
+  }
+  await updateDoc(docRef, payload)
   const updated = await getDoc(docRef)
   if (!updated.exists()) return null
-  return { id: updated.id, ...updated.data() } as UserProfile
+  return normalizeUserDoc(updated.id, updated.data() as Record<string, unknown>)
 }
 
 export async function deleteUser(id: string): Promise<void> {
@@ -204,6 +222,14 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
     ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
 
+  // Calcular usuarios únicos por espacio (siempre)
+  const usuariosUnicosGimnasio = new Set(
+    allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").map(e => e.usuarioId)
+  ).size
+  const usuariosUnicosPiscina = new Set(
+    allEntries.filter(e => e.instalacion === "piscina").map(e => e.usuarioId)
+  ).size
+
   // Calcular usuarios únicos por espacio cuando se filtra
   let usuariosUnicos: number | undefined
   if (instalacion) {
@@ -221,11 +247,13 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
   users.forEach((user) => {
     porGenero[user.genero] = (porGenero[user.genero] || 0) + 1
     porEstamento[user.estamento] = (porEstamento[user.estamento] || 0) + 1
-    if (user.facultad) {
-      porFacultad[user.facultad] = (porFacultad[user.facultad] || 0) + 1
+    const fac = normalizeAcademicField(user.facultad)
+    const prog = normalizeAcademicField(user.programaAcademico)
+    if (fac) {
+      porFacultad[fac] = (porFacultad[fac] || 0) + 1
     }
-    if (user.programaAcademico) {
-      porPrograma[user.programaAcademico] = (porPrograma[user.programaAcademico] || 0) + 1
+    if (prog) {
+      porPrograma[prog] = (porPrograma[prog] || 0) + 1
     }
   })
 
@@ -250,6 +278,8 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
     totalGimnasio,
     totalPiscina,
     usuariosUnicos,
+    usuariosUnicosGimnasio,
+    usuariosUnicosPiscina,
     porGenero,
     porEstamento,
     porFacultad,
@@ -346,6 +376,32 @@ export async function validateLockerToken(casillero: string, token: string): Pro
 export async function getAllLockers(): Promise<LockerRecord[]> {
   const snap = await getDocs(collection(db, LOCKERS_COLLECTION))
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as LockerRecord[]
+}
+
+export type UserServiceUsage = { gimnasio: number; piscina: number; guardarropas: number }
+
+/** Conteos por usuario: entradas gimnasio/piscina y registros de casillero (guardarropas). */
+export async function getUserServiceUsageCounts(): Promise<Record<string, UserServiceUsage>> {
+  const [entries, lockers] = await Promise.all([getEntries(), getAllLockers()])
+  const counts: Record<string, UserServiceUsage> = {}
+
+  const bump = (userId: string, key: keyof UserServiceUsage) => {
+    if (!userId) return
+    if (!counts[userId]) counts[userId] = { gimnasio: 0, piscina: 0, guardarropas: 0 }
+    counts[userId][key]++
+  }
+
+  for (const e of entries) {
+    const inst = e.instalacion ?? "gimnasio"
+    if (inst === "piscina") bump(e.usuarioId, "piscina")
+    else bump(e.usuarioId, "gimnasio")
+  }
+
+  for (const l of lockers) {
+    bump(l.usuarioId, "guardarropas")
+  }
+
+  return counts
 }
 
 // === ASISTENCIA MONITORES ===
