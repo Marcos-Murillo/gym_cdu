@@ -4,7 +4,8 @@ import type { AttendanceStats } from "./types"
 
 export function generateGymPDFReport(
   stats: AttendanceStats,
-  filtro: "todas" | "gimnasio" | "piscina"
+  filtro: "todas" | "gimnasio" | "piscina",
+  dateRange?: { desde?: string; hasta?: string }
 ) {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -28,7 +29,13 @@ export function generateGymPDFReport(
   doc.setFontSize(10)
   doc.text(`Instalación: ${filtroLabel}`, pageWidth / 2, currentY, { align: "center" })
   currentY += 5
-  doc.text(`Fecha: ${new Date().toLocaleDateString("es-CO")}`, pageWidth / 2, currentY, { align: "center" })
+  if (dateRange?.desde || dateRange?.hasta) {
+    const desde = dateRange.desde ? new Date(dateRange.desde + "T00:00:00").toLocaleDateString("es-CO") : "inicio"
+    const hasta = dateRange.hasta ? new Date(dateRange.hasta + "T00:00:00").toLocaleDateString("es-CO") : "hoy"
+    doc.text(`Período: ${desde} — ${hasta}`, pageWidth / 2, currentY, { align: "center" })
+  } else {
+    doc.text(`Fecha: ${new Date().toLocaleDateString("es-CO")}`, pageWidth / 2, currentY, { align: "center" })
+  }
   currentY += 15
 
   // ── 1. Resumen general ───────────────────────────────────────────────────

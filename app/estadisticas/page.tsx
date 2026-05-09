@@ -5,37 +5,19 @@ import { RouteGuard } from "@/components/route-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
-  Users,
-  DoorOpen,
-  UserCheck,
-  TrendingUp,
-  Building2,
-  GraduationCap,
-  Clock,
-  Calendar,
-  Dumbbell,
-  Waves,
-  FileDown,
-  Loader2,
+  Users, DoorOpen, UserCheck, Building2, GraduationCap,
+  Clock, Calendar, Dumbbell, Waves, FileDown, Loader2,
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
 import { generateGymPDFReport } from "@/lib/pdf-generator"
 import type { AttendanceStats } from "@/lib/types"
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend,
 } from "recharts"
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
@@ -55,6 +37,9 @@ function EstadisticasContent() {
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Filtro>("todas")
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
+  const [fechaDesde, setFechaDesde] = useState("")
+  const [fechaHasta, setFechaHasta] = useState("")
 
   useEffect(() => {
     const loadStats = async () => {
@@ -67,13 +52,28 @@ function EstadisticasContent() {
     loadStats()
   }, [filtro])
 
-  const accentColor = filtro === "piscina" ? "cyan" : "emerald"
+  const handleOpenPdfDialog = () => {
+    setFechaDesde("")
+    setFechaHasta("")
+    setPdfDialogOpen(true)
+  }
 
   const handleGeneratePDF = async () => {
     if (!stats) return
     setPdfLoading(true)
+    setPdfDialogOpen(false)
     try {
-      generateGymPDFReport(stats, filtro)
+      const instalacion = filtro === "todas" ? undefined : filtro
+      const statsWithRange = await generateStats(
+        instalacion,
+        fechaDesde || undefined,
+        fechaHasta || undefined,
+      )
+      generateGymPDFReport(
+        statsWithRange,
+        filtro,
+        { desde: fechaDesde || undefined, hasta: fechaHasta || undefined },
+      )
     } finally {
       setPdfLoading(false)
     }
@@ -109,7 +109,7 @@ function EstadisticasContent() {
         <p className="text-muted-foreground">Resumen de usuarios y entradas registradas</p>
       </div>
 
-      {/* Filtro de instalacion */}
+      {/* Filtros + botón PDF */}
       <div className="flex flex-wrap justify-center gap-2">
         <Button
           variant={filtro === "todas" ? "default" : "outline"}
@@ -136,7 +136,7 @@ function EstadisticasContent() {
         </Button>
         <Button
           variant="outline"
-          onClick={handleGeneratePDF}
+          onClick={handleOpenPdfDialog}
           disabled={pdfLoading}
           className="border-rose-300 text-rose-600 hover:bg-rose-50"
         >
@@ -148,6 +148,50 @@ function EstadisticasContent() {
           Generar PDF
         </Button>
       </div>
+
+      {/* Diálogo rango de fechas */}
+      <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Rango de fechas del reporte</DialogTitle>
+            <DialogDescription>
+              Opcional. Deja en blanco para incluir todos los datos.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="fechaDesde">Desde</Label>
+              <Input
+                id="fechaDesde"
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="fechaHasta">Hasta</Label>
+              <Input
+                id="fechaHasta"
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPdfDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleGeneratePDF}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              <FileDown className="h-4 w-4 mr-2" />
+              Descargar PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Cards de resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -321,11 +365,7 @@ function EstadisticasContent() {
               <ResponsiveContainer width="100%" height={250}>
                 <LineChart data={stats.entradasPorDia}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="fecha"
-                    tick={{ fontSize: 10 }}
-                    tickFormatter={(value: string) => value.slice(5)}
-                  />
+                  <XAxis dataKey="fecha" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} />
                   <YAxis />
                   <Tooltip />
                   <Legend />
@@ -384,13 +424,7 @@ function EstadisticasContent() {
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={facultadData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10 }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={100}
-                />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={100} />
                 <YAxis />
                 <Tooltip />
                 <Bar dataKey="value" fill="#f59e0b" radius={[4, 4, 0, 0]} name="Usuarios" />
@@ -417,10 +451,7 @@ function EstadisticasContent() {
                 .sort(([, a], [, b]) => b - a)
                 .slice(0, 12)
                 .map(([programa, cantidad]) => (
-                  <div
-                    key={programa}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                  >
+                  <div key={programa} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                     <span className="text-sm font-medium truncate flex-1">{programa}</span>
                     <Badge variant="secondary" className="ml-2">{cantidad}</Badge>
                   </div>

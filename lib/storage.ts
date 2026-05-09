@@ -210,7 +210,11 @@ export async function getBiometricByUser(usuarioId: string): Promise<BiometricDa
 }
 
 // === ESTADISTICAS ===
-export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promise<AttendanceStats> {
+export async function generateStats(
+  instalacion?: "gimnasio" | "piscina",
+  fechaDesde?: string,
+  fechaHasta?: string,
+): Promise<AttendanceStats> {
   const users = await getUsers()
   const allEntries = await getEntries()
   const usageCounts = await getUserServiceUsageCounts()
@@ -223,9 +227,13 @@ export async function generateStats(instalacion?: "gimnasio" | "piscina"): Promi
   const usuariosUnicosPiscina  = Object.values(usageCounts).filter(u => u.piscina > 0).length
 
   // Filtrar entradas por instalacion si se especifica
-  const entries = instalacion
+  let entries = instalacion
     ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
+
+  // Filtrar por rango de fechas si se especifica
+  if (fechaDesde) entries = entries.filter(e => e.fecha >= fechaDesde!)
+  if (fechaHasta) entries = entries.filter(e => e.fecha <= fechaHasta!)
 
   // Usuarios únicos del espacio filtrado
   let usuariosUnicos: number | undefined
