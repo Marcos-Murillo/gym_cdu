@@ -10,7 +10,7 @@ import { useState } from "react"
 import {
   DoorOpen, BarChart3, Users, Activity,
   Waves, Package, ShieldCheck, LogOut, UserCog,
-  ClipboardList, CalendarCheck, LogIn
+  ClipboardList, CalendarCheck, LogIn, CircleDot,
 } from "lucide-react"
 import type { UserRole, Espacio } from "@/lib/types"
 
@@ -27,6 +27,7 @@ const espaciosItems: NavItem[] = [
   { href: "/gimnasio",    label: "Gimnasio",      icon: DoorOpen,      roles: ["superadmin", "admin", "monitor"], espacio: "gimnasio" },
   { href: "/piscina",     label: "Piscina",        icon: Waves,         roles: ["superadmin", "admin", "monitor"], espacio: "piscina" },
   { href: "/guardarropas",label: "Guardarropas",   icon: Package,       roles: ["superadmin", "admin", "monitor"], espacio: "guardarropas" },
+  { href: "/tenis-mesa",  label: "Tenis de mesa",  icon: CircleDot,     roles: ["superadmin", "admin", "monitor"], espacio: "tenis_mesa" },
   { href: "/biometrico",  label: "Biométrico",     icon: Activity,      roles: ["superadmin", "admin", "monitor", "encargado"], espacio: "gimnasio" },
   { href: "/asistencia",  label: "Mi asistencia",  icon: CalendarCheck, roles: ["monitor"] },
 ]

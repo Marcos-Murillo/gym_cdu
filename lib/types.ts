@@ -1,5 +1,5 @@
 export type UserRole = "superadmin" | "admin" | "monitor" | "encargado"
-export type Espacio = "gimnasio" | "guardarropas" | "piscina"
+export type Espacio = "gimnasio" | "guardarropas" | "piscina" | "tenis_mesa"
 
 export interface SystemUser {
   id: string
@@ -90,14 +90,56 @@ export interface AttendanceRecord {
   duracionMinutos?: number
 }
 
+export interface TableTennisLoan {
+  id: string
+  mesa: number
+  raqueta1: number
+  raqueta2: number
+  usuario1Id: string
+  usuario2Id: string
+  usuario1Nombre: string
+  usuario2Nombre: string
+  usuario1Documento: string
+  usuario2Documento: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  estado: "activo" | "devuelto" | "vencido"
+  monitorId?: string
+  monitorNombre?: string
+  devueltoAt?: string
+}
+
+export interface TableTennisReport {
+  id: string
+  loanId: string
+  mesa: number
+  raqueta1: number
+  raqueta2: number
+  usuario1Nombre: string
+  usuario2Nombre: string
+  usuario1Documento: string
+  usuario2Documento: string
+  fecha: string
+  horaInicio: string
+  horaFin: string
+  fechaReporte: string
+  horaReporte: string
+  generadoPor?: string
+}
+
 export interface AttendanceStats {
   totalUsuarios: number
   totalEntradas: number
   totalGimnasio: number
   totalPiscina: number
-  usuariosUnicos?: number // Usuarios únicos que han visitado el espacio filtrado
-  usuariosUnicosGimnasio?: number // Siempre calculado
-  usuariosUnicosPiscina?: number  // Siempre calculado
+  totalTenisMesa?: number
+  reportesTenisMesa?: number
+  prestamosActivosTenis?: number
+  usuariosUnicos?: number
+  usuariosUnicosGimnasio?: number
+  usuariosUnicosPiscina?: number
+  usuariosUnicosTenisMesa?: number
   porGenero: Record<string, number>
   porEstamento: Record<string, number>
   porFacultad: Record<string, number>

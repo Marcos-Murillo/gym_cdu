@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Users, DoorOpen, UserCheck, Building2, GraduationCap,
-  Clock, Calendar, Dumbbell, Waves, FileDown, Loader2,
+  Clock, Calendar, Dumbbell, Waves, FileDown, Loader2, CircleDot,
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
+import { generateTableTennisStats } from "@/lib/table-tennis-storage"
 import { generateGymPDFReport } from "@/lib/pdf-generator"
 import type { AttendanceStats } from "@/lib/types"
 import {
@@ -22,7 +23,7 @@ import {
 
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
-type Filtro = "todas" | "gimnasio" | "piscina"
+type Filtro = "todas" | "gimnasio" | "piscina" | "tenis_mesa"
 
 export default function EstadisticasPage() {
   return (
@@ -44,9 +45,14 @@ function EstadisticasContent() {
   useEffect(() => {
     const loadStats = async () => {
       setLoading(true)
-      const instalacion = filtro === "todas" ? undefined : filtro
-      const data = await generateStats(instalacion)
-      setStats(data)
+      if (filtro === "tenis_mesa") {
+        const data = await generateTableTennisStats()
+        setStats(data)
+      } else {
+        const instalacion = filtro === "todas" ? undefined : filtro
+        const data = await generateStats(instalacion)
+        setStats(data)
+      }
       setLoading(false)
     }
     loadStats()
@@ -63,12 +69,17 @@ function EstadisticasContent() {
     setPdfLoading(true)
     setPdfDialogOpen(false)
     try {
-      const instalacion = filtro === "todas" ? undefined : filtro
-      const statsWithRange = await generateStats(
-        instalacion,
-        fechaDesde || undefined,
-        fechaHasta || undefined,
-      )
+      const statsWithRange =
+        filtro === "tenis_mesa"
+          ? await generateTableTennisStats(
+              fechaDesde || undefined,
+              fechaHasta || undefined,
+            )
+          : await generateStats(
+              filtro === "todas" ? undefined : filtro,
+              fechaDesde || undefined,
+              fechaHasta || undefined,
+            )
       generateGymPDFReport(
         statsWithRange,
         filtro,
@@ -133,6 +144,14 @@ function EstadisticasContent() {
         >
           <Waves className="h-4 w-4 mr-2" />
           Piscina
+        </Button>
+        <Button
+          variant={filtro === "tenis_mesa" ? "default" : "outline"}
+          onClick={() => setFiltro("tenis_mesa")}
+          className={filtro === "tenis_mesa" ? "bg-violet-600 hover:bg-violet-700" : ""}
+        >
+          <CircleDot className="h-4 w-4 mr-2" />
+          Tenis de mesa
         </Button>
         <Button
           variant="outline"
@@ -217,7 +236,13 @@ function EstadisticasContent() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">
-                  {filtro === "todas" ? "Total Entradas" : filtro === "gimnasio" ? "Entradas Gimnasio" : "Entradas Piscina"}
+                  {filtro === "todas"
+                    ? "Total Entradas"
+                    : filtro === "gimnasio"
+                      ? "Entradas Gimnasio"
+                      : filtro === "piscina"
+                        ? "Entradas Piscina"
+                        : "Préstamos Tenis de mesa"}
                 </p>
                 <p className="text-3xl font-bold text-foreground">{stats.totalEntradas}</p>
               </div>
@@ -249,6 +274,51 @@ function EstadisticasContent() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Piscina</p>
                     <p className="text-3xl font-bold text-foreground">{stats.totalPiscina}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-violet-100 flex items-center justify-center">
+                    <CircleDot className="h-6 w-6 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Tenis de mesa</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.totalTenisMesa ?? 0}</p>
+                    {(stats.prestamosActivosTenis ?? 0) > 0 && (
+                      <p className="text-xs text-violet-600">{stats.prestamosActivosTenis} activos</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : filtro === "tenis_mesa" ? (
+          <>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-violet-100 flex items-center justify-center">
+                    <Users className="h-6 w-6 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Usuarios únicos</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.usuariosUnicosTenisMesa ?? 0}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <Clock className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Préstamos activos</p>
+                    <p className="text-3xl font-bold text-foreground">{stats.prestamosActivosTenis ?? 0}</p>
                   </div>
                 </div>
               </CardContent>

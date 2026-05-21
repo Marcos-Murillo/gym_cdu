@@ -26,6 +26,7 @@ const ESPACIO_LABELS: Record<Espacio, string> = {
   gimnasio: "Gimnasio",
   guardarropas: "Guardarropas",
   piscina: "Piscina",
+  tenis_mesa: "Tenis de mesa",
 }
 
 const ROLES_CON_ESPACIO: UserRole[] = ["monitor", "encargado"]

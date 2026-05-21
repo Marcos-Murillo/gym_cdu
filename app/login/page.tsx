@@ -20,6 +20,7 @@ function getRedirectPath(user: SystemUser): string {
     if (user.espacio === "gimnasio") return "/gimnasio"
     if (user.espacio === "guardarropas") return "/guardarropas"
     if (user.espacio === "piscina") return "/piscina"
+    if (user.espacio === "tenis_mesa") return "/tenis-mesa"
   }
   return "/sin-acceso"
 }

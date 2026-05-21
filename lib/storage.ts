@@ -218,13 +218,17 @@ export async function generateStats(
   const users = await getUsers()
   const allEntries = await getEntries()
   const usageCounts = await getUserServiceUsageCounts()
+  const { getAllTableTennisLoans } = await import("./table-tennis-storage")
+  const tenisLoans = await getAllTableTennisLoans()
 
   const totalGimnasio = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").length
   const totalPiscina = allEntries.filter(e => e.instalacion === "piscina").length
+  const totalTenisMesa = tenisLoans.length
+  const prestamosActivosTenis = tenisLoans.filter(l => l.estado === "activo").length
 
-  // Usuarios únicos por servicio: reutiliza getUserServiceUsageCounts igual que la página de usuarios
   const usuariosUnicosGimnasio = Object.values(usageCounts).filter(u => u.gimnasio > 0).length
   const usuariosUnicosPiscina  = Object.values(usageCounts).filter(u => u.piscina > 0).length
+  const usuariosUnicosTenisMesa = Object.values(usageCounts).filter(u => u.tenis_mesa > 0).length
 
   // Filtrar entradas por instalacion si se especifica
   let entries = instalacion
@@ -280,9 +284,12 @@ export async function generateStats(
     totalEntradas: entries.length,
     totalGimnasio,
     totalPiscina,
+    totalTenisMesa,
+    prestamosActivosTenis,
     usuariosUnicos,
     usuariosUnicosGimnasio,
     usuariosUnicosPiscina,
+    usuariosUnicosTenisMesa,
     porGenero,
     porEstamento,
     porFacultad,
@@ -381,16 +388,28 @@ export async function getAllLockers(): Promise<LockerRecord[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as LockerRecord[]
 }
 
-export type UserServiceUsage = { gimnasio: number; piscina: number; guardarropas: number }
+export type UserServiceUsage = {
+  gimnasio: number
+  piscina: number
+  guardarropas: number
+  tenis_mesa: number
+}
 
-/** Conteos por usuario: entradas gimnasio/piscina y registros de casillero (guardarropas). */
+/** Conteos por usuario: entradas gimnasio/piscina, casilleros y préstamos tenis de mesa. */
 export async function getUserServiceUsageCounts(): Promise<Record<string, UserServiceUsage>> {
-  const [entries, lockers] = await Promise.all([getEntries(), getAllLockers()])
+  const { getAllTableTennisLoans } = await import("./table-tennis-storage")
+  const [entries, lockers, tenisLoans] = await Promise.all([
+    getEntries(),
+    getAllLockers(),
+    getAllTableTennisLoans(),
+  ])
   const counts: Record<string, UserServiceUsage> = {}
 
   const bump = (userId: string, key: keyof UserServiceUsage) => {
     if (!userId) return
-    if (!counts[userId]) counts[userId] = { gimnasio: 0, piscina: 0, guardarropas: 0 }
+    if (!counts[userId]) {
+      counts[userId] = { gimnasio: 0, piscina: 0, guardarropas: 0, tenis_mesa: 0 }
+    }
     counts[userId][key]++
   }
 
@@ -402,6 +421,11 @@ export async function getUserServiceUsageCounts(): Promise<Record<string, UserSe
 
   for (const l of lockers) {
     bump(l.usuarioId, "guardarropas")
+  }
+
+  for (const loan of tenisLoans) {
+    bump(loan.usuario1Id, "tenis_mesa")
+    bump(loan.usuario2Id, "tenis_mesa")
   }
 
   return counts

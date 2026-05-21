@@ -4,7 +4,7 @@ import type { AttendanceStats } from "./types"
 
 export function generateGymPDFReport(
   stats: AttendanceStats,
-  filtro: "todas" | "gimnasio" | "piscina",
+  filtro: "todas" | "gimnasio" | "piscina" | "tenis_mesa",
   dateRange?: { desde?: string; hasta?: string }
 ) {
   const doc = new jsPDF()
@@ -13,7 +13,13 @@ export function generateGymPDFReport(
   let currentY = 20
 
   const filtroLabel =
-    filtro === "todas" ? "Todas las instalaciones" : filtro === "gimnasio" ? "Gimnasio" : "Piscina"
+    filtro === "todas"
+      ? "Todas las instalaciones"
+      : filtro === "gimnasio"
+        ? "Gimnasio"
+        : filtro === "piscina"
+          ? "Piscina"
+          : "Tenis de mesa"
 
   // ── Portada ──────────────────────────────────────────────────────────────
   doc.setFontSize(20)

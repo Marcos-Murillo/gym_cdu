@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { RouteGuard } from "@/components/route-guard"
+import { useAuth } from "@/lib/auth-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,9 +27,12 @@ import {
   Eye,
   Trash2
 } from "lucide-react"
-import { filterUsers, getUsers } from "@/lib/storage"
+import { filterUsers, getUsers, getUserServiceUsageCounts } from "@/lib/storage"
+import type { UserServiceUsage } from "@/lib/storage"
 import { ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import type { UserProfile } from "@/lib/types"
+
+type ServicioFiltro = "todos" | "gimnasio" | "piscina" | "guardarropas" | "tenis_mesa"
 
 export default function UsuariosPage() {
   return (
@@ -39,8 +43,13 @@ export default function UsuariosPage() {
 }
 
 function UsuariosContent() {
+  const { user } = useAuth()
+  const isSuperAdmin = user?.rol === "superadmin"
+
   const [usuarios, setUsuarios] = useState<UserProfile[]>([])
-  const [filteredUsuarios, setFilteredUsuarios] = useState<UserProfile[]>([])
+  const [baseFilteredUsers, setBaseFilteredUsers] = useState<UserProfile[]>([])
+  const [usageByUser, setUsageByUser] = useState<Record<string, UserServiceUsage>>({})
+  const [servicioFiltro, setServicioFiltro] = useState<ServicioFiltro>("todos")
   const [loading, setLoading] = useState(true)
   const [showFilters, setShowFilters] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
@@ -59,11 +68,26 @@ function UsuariosContent() {
     const loadUsers = async () => {
       const users = await getUsers()
       setUsuarios(users)
-      setFilteredUsuarios(users)
+      setBaseFilteredUsers(users)
       setLoading(false)
     }
     loadUsers()
   }, [])
+
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      setUsageByUser({})
+      setServicioFiltro("todos")
+      return
+    }
+    let cancelled = false
+    getUserServiceUsageCounts().then((counts) => {
+      if (!cancelled) setUsageByUser(counts)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [isSuperAdmin])
 
   useEffect(() => {
     const applyFilters = async () => {
@@ -73,16 +97,22 @@ function UsuariosContent() {
         facultad: facultad || undefined,
         programa: programa || undefined,
       })
-      setFilteredUsuarios(filtered)
+      setBaseFilteredUsers(filtered)
     }
     applyFilters()
   }, [nombre, estamento, facultad, programa])
+
+  const filteredUsuarios = useMemo(() => {
+    if (!isSuperAdmin || servicioFiltro === "todos") return baseFilteredUsers
+    return baseFilteredUsers.filter((u) => (usageByUser[u.id]?.[servicioFiltro] ?? 0) > 0)
+  }, [baseFilteredUsers, isSuperAdmin, servicioFiltro, usageByUser])
 
   const clearFilters = () => {
     setNombre("")
     setEstamento("")
     setFacultad("")
     setPrograma("")
+    setServicioFiltro("todos")
   }
 
   const handleViewUser = (usuario: UserProfile) => {
@@ -133,7 +163,7 @@ function UsuariosContent() {
           facultad: facultad || undefined,
           programa: programa || undefined,
         })
-        setFilteredUsuarios(filtered)
+        setBaseFilteredUsers(filtered)
       }, 150)
     } catch (error) {
       console.error("Error al eliminar usuario:", error)
@@ -144,7 +174,11 @@ function UsuariosContent() {
     }
   }
 
-  const hasActiveFilters = nombre || estamento || facultad || programa
+  const hasActiveFilters =
+    nombre || estamento || facultad || programa || (isSuperAdmin && servicioFiltro !== "todos")
+
+  const usageFor = (usuarioId: string): UserServiceUsage =>
+    usageByUser[usuarioId] ?? { gimnasio: 0, piscina: 0, guardarropas: 0, tenis_mesa: 0 }
 
   if (loading) {
     return (
@@ -155,7 +189,7 @@ function UsuariosContent() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Usuarios Registrados</h1>
         <p className="text-muted-foreground">Listado de todos los usuarios del gimnasio</p>
@@ -193,7 +227,9 @@ function UsuariosContent() {
           </div>
         </CardHeader>
         <CardContent className={`space-y-4 ${showFilters ? "block" : "hidden md:block"}`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${isSuperAdmin ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}
+          >
             <div className="space-y-2">
               <Label htmlFor="nombre">Nombre</Label>
               <div className="relative">
@@ -265,6 +301,27 @@ function UsuariosContent() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isSuperAdmin && (
+              <div className="space-y-2 md:col-span-2 lg:col-span-1">
+                <Label htmlFor="servicio">Servicio</Label>
+                <Select
+                  value={servicioFiltro}
+                  onValueChange={(v) => setServicioFiltro(v as ServicioFiltro)}
+                >
+                  <SelectTrigger id="servicio">
+                    <SelectValue placeholder="Todos los servicios" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los servicios</SelectItem>
+                    <SelectItem value="piscina">Piscina</SelectItem>
+                    <SelectItem value="gimnasio">Gimnasio</SelectItem>
+                    <SelectItem value="guardarropas">Guardarropas</SelectItem>
+                    <SelectItem value="tenis_mesa">Tenis de mesa</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -283,51 +340,131 @@ function UsuariosContent() {
 
       {/* Tabla de usuarios */}
       {filteredUsuarios.length > 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <Table>
+        <Card className="min-w-0 overflow-hidden">
+          <CardContent className="min-w-0 p-0">
+            <Table containerClassName="overflow-x-hidden" className="w-full table-auto">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Estamento</TableHead>
-                  <TableHead className="hidden md:table-cell">Contacto</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead className="min-w-0 px-2 py-2 align-middle whitespace-normal">
+                    Usuario
+                  </TableHead>
+                  <TableHead
+                    className={`shrink-0 px-2 py-2 text-left align-middle whitespace-normal ${
+                      isSuperAdmin ? "w-[5.5rem]" : "w-[7rem]"
+                    }`}
+                  >
+                    Estamento
+                  </TableHead>
+                  {isSuperAdmin && (
+                    <>
+                      <TableHead
+                        className="w-[3.25rem] shrink-0 px-1 py-2 text-center align-middle whitespace-normal text-xs leading-tight"
+                        title="Entradas a piscina"
+                      >
+                        Piscina
+                      </TableHead>
+                      <TableHead
+                        className="w-[3.25rem] shrink-0 px-1 py-2 text-center align-middle whitespace-normal text-xs leading-tight"
+                        title="Entradas a gimnasio"
+                      >
+                        Gimnasio
+                      </TableHead>
+                      <TableHead
+                        className="hidden w-[4rem] shrink-0 px-1 py-2 text-center align-middle whitespace-normal text-xs leading-tight sm:table-cell"
+                        title="Usos de guardarropas"
+                      >
+                        Guardarropas
+                      </TableHead>
+                      <TableHead
+                        className="hidden w-[4rem] shrink-0 px-1 py-2 text-center align-middle whitespace-normal text-xs leading-tight lg:table-cell"
+                        title="Préstamos tenis de mesa"
+                      >
+                        Tenis
+                      </TableHead>
+                    </>
+                  )}
+                  <TableHead className="hidden min-w-0 px-2 py-2 whitespace-normal md:table-cell">
+                    Contacto
+                  </TableHead>
+                  <TableHead className="w-11 shrink-0 px-1 py-2 text-center align-middle">
+                    <span className="sr-only">Acciones</span>
+                    <span className="text-muted-foreground text-lg leading-none" aria-hidden>
+                      ⋮
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsuarios.map((usuario) => (
                   <TableRow key={usuario.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                          <User className="h-5 w-5 text-emerald-600" />
+                    <TableCell className="min-w-0 px-2 py-2 align-middle whitespace-normal">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="h-8 w-8 shrink-0 rounded-full bg-emerald-100 flex items-center justify-center sm:h-9 sm:w-9">
+                          <User className="h-4 w-4 text-emerald-600 sm:h-[18px] sm:w-[18px]" />
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground">{usuario.nombres}</p>
-                          <div className="text-sm text-muted-foreground space-y-0.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-foreground text-sm leading-tight">
+                            {usuario.nombres}
+                          </p>
+                          <div className="mt-0.5 space-y-0.5 text-muted-foreground text-[11px] leading-snug sm:text-xs">
                             {usuario.codigoEstudiantil && (
-                              <p className="font-mono text-xs text-emerald-600">Código: {usuario.codigoEstudiantil}</p>
+                              <p className="truncate font-mono text-emerald-600">
+                                {usuario.codigoEstudiantil}
+                              </p>
                             )}
                             {usuario.facultad && usuario.facultad !== "N/A" && (
                               <p className="truncate">{usuario.facultad.replace("FACULTAD DE ", "")}</p>
                             )}
                             {usuario.programaAcademico && usuario.programaAcademico !== "N/A" && (
-                              <p className="truncate text-xs">{usuario.programaAcademico}</p>
+                              <p className="truncate">{usuario.programaAcademico}</p>
                             )}
                           </div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{usuario.estamento}</Badge>
+                    <TableCell
+                      className={`shrink-0 px-2 py-2 align-middle whitespace-normal ${
+                        isSuperAdmin ? "w-[5.5rem]" : "w-[7rem]"
+                      }`}
+                    >
+                      <Badge
+                        variant="secondary"
+                        className="block max-w-full truncate px-1.5 py-0 text-center text-[10px] font-normal leading-tight sm:text-xs"
+                      >
+                        {usuario.estamento}
+                      </Badge>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="text-sm space-y-1">
-                        <p className="text-muted-foreground truncate">{usuario.correo}</p>
-                        <p className="text-muted-foreground">{usuario.telefono}</p>
+                    {isSuperAdmin && (
+                      <>
+                        <TableCell className="w-[3.25rem] shrink-0 px-1 py-2 text-center align-middle">
+                          <span className="inline-flex min-h-[1.5rem] w-full max-w-[3rem] items-center justify-center rounded-md bg-blue-100 px-1 py-0.5 text-xs font-semibold text-blue-800 tabular-nums">
+                            {usageFor(usuario.id).piscina}
+                          </span>
+                        </TableCell>
+                        <TableCell className="w-[3.25rem] shrink-0 px-1 py-2 text-center align-middle">
+                          <span className="inline-flex min-h-[1.5rem] w-full max-w-[3rem] items-center justify-center rounded-md bg-orange-100 px-1 py-0.5 text-xs font-semibold text-orange-800 tabular-nums">
+                            {usageFor(usuario.id).gimnasio}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden w-[4rem] shrink-0 px-1 py-2 text-center align-middle sm:table-cell">
+                          <span className="inline-flex min-h-[1.5rem] w-full max-w-[3.5rem] items-center justify-center rounded-md bg-slate-100 px-1 py-0.5 text-xs font-semibold text-slate-700 tabular-nums">
+                            {usageFor(usuario.id).guardarropas}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden w-[4rem] shrink-0 px-1 py-2 text-center align-middle lg:table-cell">
+                          <span className="inline-flex min-h-[1.5rem] w-full max-w-[3.5rem] items-center justify-center rounded-md bg-violet-100 px-1 py-0.5 text-xs font-semibold text-violet-800 tabular-nums">
+                            {usageFor(usuario.id).tenis_mesa}
+                          </span>
+                        </TableCell>
+                      </>
+                    )}
+                    <TableCell className="hidden min-w-0 px-2 py-2 whitespace-normal md:table-cell">
+                      <div className="min-w-0 space-y-0.5 text-xs">
+                        <p className="break-all text-muted-foreground">{usuario.correo}</p>
+                        <p className="truncate text-muted-foreground">{usuario.telefono}</p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="w-11 shrink-0 px-1 py-2 text-center align-middle">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
