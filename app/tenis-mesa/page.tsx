@@ -5,8 +5,7 @@ import { RouteGuard } from "@/components/route-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { TableTennisUserSearch } from "@/components/table-tennis-user-search"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -23,10 +22,7 @@ import {
   CheckCircle2,
   Clock,
   FileWarning,
-  Search,
   Table2,
-  User,
-  XCircle,
   Bell,
 } from "lucide-react"
 import type { TableTennisLoan, TableTennisReport, UserProfile } from "@/lib/types"
@@ -206,68 +202,6 @@ function TenisMesaContent() {
     await loadData()
   }
 
-  const UserSearchBlock = ({
-    label,
-    busqueda,
-    setBusqueda,
-    usuario,
-    setUsuario,
-    error,
-    setError,
-    buscando,
-    onSearch,
-  }: {
-    label: string
-    busqueda: string
-    setBusqueda: (v: string) => void
-    usuario: UserProfile | null
-    setUsuario: (u: UserProfile | null) => void
-    error: string
-    setError: (v: string) => void
-    buscando: boolean
-    onSearch: () => void
-  }) => (
-    <div className="space-y-2 rounded-lg border p-4">
-      <p className="text-sm font-medium">{label}</p>
-      <div className="flex gap-2">
-        <Input
-          value={busqueda}
-          onChange={(e) => {
-            setBusqueda(e.target.value)
-            setError("")
-          }}
-          placeholder="Cédula o código estudiantil"
-          disabled={!!usuario}
-          onKeyDown={(e) => e.key === "Enter" && onSearch()}
-        />
-        {!usuario ? (
-          <Button onClick={onSearch} disabled={!busqueda.trim() || buscando} variant="secondary">
-            <Search className="h-4 w-4" />
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            onClick={() => {
-              setUsuario(null)
-              setBusqueda("")
-            }}
-          >
-            <XCircle className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-      {error && (
-        <p className="text-sm text-destructive">{error}</p>
-      )}
-      {usuario && (
-        <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 p-2 rounded">
-          <User className="h-4 w-4 shrink-0" />
-          <span>{usuario.nombres} — {usuario.numeroDocumento}</span>
-        </div>
-      )}
-    </div>
-  )
-
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="text-center space-y-2">
@@ -355,25 +289,33 @@ function TenisMesaContent() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <UserSearchBlock
+                <TableTennisUserSearch
+                  id="tenis-busqueda-1"
                   label="Persona 1 (registrada en el sistema)"
                   busqueda={busqueda1}
-                  setBusqueda={setBusqueda1}
+                  onBusquedaChange={setBusqueda1}
                   usuario={usuario1}
-                  setUsuario={setUsuario1}
+                  onClearUsuario={() => {
+                    setUsuario1(null)
+                    setBusqueda1("")
+                  }}
                   error={error1}
-                  setError={setError1}
+                  onClearError={() => setError1("")}
                   buscando={buscando1}
                   onSearch={() => buscarUsuario(busqueda1, 1)}
                 />
-                <UserSearchBlock
+                <TableTennisUserSearch
+                  id="tenis-busqueda-2"
                   label="Persona 2 (registrada en el sistema)"
                   busqueda={busqueda2}
-                  setBusqueda={setBusqueda2}
+                  onBusquedaChange={setBusqueda2}
                   usuario={usuario2}
-                  setUsuario={setUsuario2}
+                  onClearUsuario={() => {
+                    setUsuario2(null)
+                    setBusqueda2("")
+                  }}
                   error={error2}
-                  setError={setError2}
+                  onClearError={() => setError2("")}
                   buscando={buscando2}
                   onSearch={() => buscarUsuario(busqueda2, 2)}
                 />
