@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Users, DoorOpen, UserCheck, Building2, GraduationCap,
-  Clock, Calendar, Dumbbell, Waves, FileDown, Loader2, CircleDot,
+  Clock, Calendar, Dumbbell, Waves, FileDown, Loader2, CircleDot, Table2,
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
 import { generateTableTennisStats } from "@/lib/table-tennis-storage"
@@ -242,7 +242,7 @@ function EstadisticasContent() {
                       ? "Entradas Gimnasio"
                       : filtro === "piscina"
                         ? "Entradas Piscina"
-                        : "Préstamos Tenis de mesa"}
+                        : "Actividad Tenis de mesa"}
                 </p>
                 <p className="text-3xl font-bold text-foreground">{stats.totalEntradas}</p>
               </div>
@@ -319,6 +319,26 @@ function EstadisticasContent() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Préstamos activos</p>
                     <p className="text-3xl font-bold text-foreground">{stats.prestamosActivosTenis ?? 0}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-lg bg-violet-100 flex items-center justify-center">
+                    <Table2 className="h-6 w-6 text-violet-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Mesa más usada</p>
+                    <p className="text-3xl font-bold text-foreground">
+                      {stats.mesaMasUsada != null ? `Mesa ${stats.mesaMasUsada}` : "—"}
+                    </p>
+                    {(stats.usosMesaMasUsada ?? 0) > 0 && (
+                      <p className="text-xs text-violet-600">
+                        {stats.usosMesaMasUsada} {stats.usosMesaMasUsada === 1 ? "uso" : "usos"} en el período
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>

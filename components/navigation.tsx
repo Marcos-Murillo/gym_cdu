@@ -33,6 +33,7 @@ const espaciosItems: NavItem[] = [
 ]
 
 const adminItems: NavItem[] = [
+  { href: "/tenis-mesa",               label: "Tenis de mesa",         icon: CircleDot,    roles: ["superadmin", "admin"], espacio: "tenis_mesa" },
   { href: "/estadisticas",           label: "Estadísticas",          icon: BarChart3,    roles: ["superadmin", "admin"] },
   { href: "/guardarropas/historial", label: "Historial casilleros",  icon: ClipboardList,roles: ["superadmin", "admin"] },
   { href: "/asistencia/seguimiento", label: "Seguimiento asistencia",icon: CalendarCheck,roles: ["superadmin", "admin"] },

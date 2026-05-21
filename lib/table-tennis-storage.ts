@@ -9,7 +9,14 @@ import {
   where,
 } from "firebase/firestore"
 import { db } from "./firebase"
-import type { AttendanceStats, TableTennisLoan, TableTennisReport, UserProfile } from "./types"
+import type {
+  AttendanceStats,
+  TableTennisAccess,
+  TableTennisHistoryEntry,
+  TableTennisLoan,
+  TableTennisReport,
+  UserProfile,
+} from "./types"
 import {
   addHoursToHora,
   nowDateTime,
@@ -20,25 +27,49 @@ import { getUsers } from "./storage"
 
 const LOANS_COLLECTION = "tableTennisLoans"
 const REPORTS_COLLECTION = "tableTennisReports"
+const ACCESS_COLLECTION = "tableTennisAccess"
 
-function mapLoan(id: string, data: Record<string, unknown>): TableTennisLoan {
-  return { id, ...data } as TableTennisLoan
+function normalizeLoan(id: string, data: Record<string, unknown>): TableTennisLoan {
+  const raw = { id, ...data } as TableTennisLoan
+  if (raw.usuarioId) return raw
+  return {
+    ...raw,
+    usuarioId: raw.usuario1Id ?? "",
+    usuarioNombre: raw.usuario1Nombre ?? "",
+    usuarioDocumento: raw.usuario1Documento ?? "",
+  }
+}
+
+export function loanUsuarioId(loan: TableTennisLoan): string {
+  return loan.usuarioId || loan.usuario1Id || ""
+}
+
+export function loanUsuarioNombre(loan: TableTennisLoan): string {
+  return loan.usuarioNombre || loan.usuario1Nombre || ""
+}
+
+export function loanUsuarioDocumento(loan: TableTennisLoan): string {
+  return loan.usuarioDocumento || loan.usuario1Documento || ""
 }
 
 export async function getActiveTableTennisLoans(): Promise<TableTennisLoan[]> {
   const q = query(collection(db, LOANS_COLLECTION), where("estado", "==", "activo"))
   const snap = await getDocs(q)
-  return snap.docs.map((d) => mapLoan(d.id, d.data() as Record<string, unknown>))
-}
-
-export async function getVencidosSinReporte(): Promise<TableTennisLoan[]> {
-  const activos = await getActiveTableTennisLoans()
-  return activos.filter((l) => prestamoVencido(l.fecha, l.horaFin))
+  return snap.docs.map((d) => normalizeLoan(d.id, d.data() as Record<string, unknown>))
 }
 
 export async function getAllTableTennisLoans(): Promise<TableTennisLoan[]> {
   const snap = await getDocs(collection(db, LOANS_COLLECTION))
-  return snap.docs.map((d) => mapLoan(d.id, d.data() as Record<string, unknown>))
+  return snap.docs
+    .map((d) => normalizeLoan(d.id, d.data() as Record<string, unknown>))
+    .sort((a, b) => `${b.fecha} ${b.horaInicio}`.localeCompare(`${a.fecha} ${a.horaInicio}`))
+}
+
+export async function getAllTableTennisAccess(): Promise<TableTennisAccess[]> {
+  const snap = await getDocs(collection(db, ACCESS_COLLECTION))
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as TableTennisAccess))
+    .sort((a, b) => `${b.fecha} ${b.hora}`.localeCompare(`${a.fecha} ${a.hora}`))
 }
 
 export async function getTableTennisReports(): Promise<TableTennisReport[]> {
@@ -47,21 +78,63 @@ export async function getTableTennisReports(): Promise<TableTennisReport[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as TableTennisReport))
 }
 
+export async function getTableTennisHistory(): Promise<TableTennisHistoryEntry[]> {
+  const [accesos, prestamos] = await Promise.all([
+    getAllTableTennisAccess(),
+    getAllTableTennisLoans(),
+  ])
+  const entries: TableTennisHistoryEntry[] = [
+    ...accesos.map((a) => ({ tipo: "acceso" as const, ...a })),
+    ...prestamos.map((p) => ({ tipo: "prestamo" as const, ...p })),
+  ]
+  return entries.sort((a, b) => {
+    const ta = a.tipo === "acceso" ? `${a.fecha} ${a.hora}` : `${a.fecha} ${a.horaInicio}`
+    const tb = b.tipo === "acceso" ? `${b.fecha} ${b.hora}` : `${b.fecha} ${b.horaInicio}`
+    return tb.localeCompare(ta)
+  })
+}
+
 export async function isMesaDisponible(mesa: number): Promise<boolean> {
   const activos = await getActiveTableTennisLoans()
   return !activos.some((l) => l.mesa === mesa)
 }
 
+export async function userHasLoanToday(usuarioId: string, fecha?: string): Promise<boolean> {
+  const hoy = fecha ?? nowDateTime().fecha
+  const all = await getAllTableTennisLoans()
+  return all.some((l) => loanUsuarioId(l) === usuarioId && l.fecha === hoy)
+}
+
+export async function createTableTennisAccess(
+  usuario: UserProfile,
+  mesa: number,
+): Promise<TableTennisAccess> {
+  if (mesa < 1 || mesa > 8) throw new Error("Mesa inválida (1 a 8)")
+  const { fecha, hora } = nowDateTime()
+  const record: Omit<TableTennisAccess, "id"> = {
+    usuarioId: usuario.id,
+    usuarioNombre: usuario.nombres,
+    usuarioDocumento: usuario.numeroDocumento,
+    mesa,
+    fecha,
+    hora,
+  }
+  const ref = await addDoc(collection(db, ACCESS_COLLECTION), record)
+  return { ...record, id: ref.id }
+}
+
 export async function createTableTennisLoan(params: {
   mesa: number
-  usuario1: UserProfile
-  usuario2: UserProfile
+  usuario: UserProfile
   monitorId?: string
   monitorNombre?: string
 }): Promise<TableTennisLoan> {
-  const { mesa, usuario1, usuario2, monitorId, monitorNombre } = params
+  const { mesa, usuario, monitorId, monitorNombre } = params
   if (mesa < 1 || mesa > 8) throw new Error("Mesa inválida")
-  if (usuario1.id === usuario2.id) throw new Error("Deben ser dos personas distintas")
+
+  if (await userHasLoanToday(usuario.id)) {
+    throw new Error("Este usuario ya recibió un préstamo hoy. Solo se permite uno por día.")
+  }
 
   const disponible = await isMesaDisponible(mesa)
   if (!disponible) throw new Error(`La mesa ${mesa} no está disponible`)
@@ -74,12 +147,9 @@ export async function createTableTennisLoan(params: {
     mesa,
     raqueta1,
     raqueta2,
-    usuario1Id: usuario1.id,
-    usuario2Id: usuario2.id,
-    usuario1Nombre: usuario1.nombres,
-    usuario2Nombre: usuario2.nombres,
-    usuario1Documento: usuario1.numeroDocumento,
-    usuario2Documento: usuario2.numeroDocumento,
+    usuarioId: usuario.id,
+    usuarioNombre: usuario.nombres,
+    usuarioDocumento: usuario.numeroDocumento,
     fecha,
     horaInicio: hora,
     horaFin,
@@ -115,10 +185,8 @@ export async function createTableTennisReport(
     mesa: loan.mesa,
     raqueta1: loan.raqueta1,
     raqueta2: loan.raqueta2,
-    usuario1Nombre: loan.usuario1Nombre,
-    usuario2Nombre: loan.usuario2Nombre,
-    usuario1Documento: loan.usuario1Documento,
-    usuario2Documento: loan.usuario2Documento,
+    usuarioNombre: loanUsuarioNombre(loan),
+    usuarioDocumento: loanUsuarioDocumento(loan),
     fecha: loan.fecha,
     horaInicio: loan.horaInicio,
     horaFin: loan.horaFin,
@@ -136,18 +204,26 @@ export async function generateTableTennisStats(
   fechaHasta?: string,
 ): Promise<AttendanceStats> {
   const users = await getUsers()
-  const allLoans = await getAllTableTennisLoans()
-  const reports = await getTableTennisReports()
+  const [allLoans, allAccess, reports] = await Promise.all([
+    getAllTableTennisLoans(),
+    getAllTableTennisAccess(),
+    getTableTennisReports(),
+  ])
 
   let loans = allLoans
-  if (fechaDesde) loans = loans.filter((l) => l.fecha >= fechaDesde)
-  if (fechaHasta) loans = loans.filter((l) => l.fecha <= fechaHasta)
+  let accesos = allAccess
+  if (fechaDesde) {
+    loans = loans.filter((l) => l.fecha >= fechaDesde)
+    accesos = accesos.filter((a) => a.fecha >= fechaDesde)
+  }
+  if (fechaHasta) {
+    loans = loans.filter((l) => l.fecha <= fechaHasta)
+    accesos = accesos.filter((a) => a.fecha <= fechaHasta)
+  }
 
   const userIds = new Set<string>()
-  loans.forEach((l) => {
-    userIds.add(l.usuario1Id)
-    userIds.add(l.usuario2Id)
-  })
+  loans.forEach((l) => userIds.add(loanUsuarioId(l)))
+  accesos.forEach((a) => userIds.add(a.usuarioId))
 
   const porGenero: Record<string, number> = {}
   const porEstamento: Record<string, number> = {}
@@ -167,6 +243,12 @@ export async function generateTableTennisStats(
       }
     })
 
+  accesos.forEach((a) => {
+    entradasPorDiaMap[a.fecha] = (entradasPorDiaMap[a.fecha] || 0) + 1
+    const hora = a.hora.split(":")[0] + ":00"
+    entradasPorHoraMap[hora] = (entradasPorHoraMap[hora] || 0) + 1
+  })
+
   loans.forEach((loan) => {
     entradasPorDiaMap[loan.fecha] = (entradasPorDiaMap[loan.fecha] || 0) + 1
     const hora = loan.horaInicio.split(":")[0] + ":00"
@@ -174,17 +256,37 @@ export async function generateTableTennisStats(
   })
 
   const activos = loans.filter((l) => l.estado === "activo").length
+  const totalActividad = accesos.length + loans.length
+
+  const mesaCounts: Record<number, number> = {}
+  accesos.forEach((a) => {
+    mesaCounts[a.mesa] = (mesaCounts[a.mesa] || 0) + 1
+  })
+  loans.forEach((l) => {
+    mesaCounts[l.mesa] = (mesaCounts[l.mesa] || 0) + 1
+  })
+  let mesaMasUsada: number | undefined
+  let usosMesaMasUsada = 0
+  for (const [mesaStr, count] of Object.entries(mesaCounts)) {
+    const mesaNum = Number(mesaStr)
+    if (count > usosMesaMasUsada || (count === usosMesaMasUsada && mesaNum < (mesaMasUsada ?? 99))) {
+      usosMesaMasUsada = count
+      mesaMasUsada = mesaNum
+    }
+  }
 
   return {
     totalUsuarios: users.length,
-    totalEntradas: loans.length,
+    totalEntradas: totalActividad,
     totalGimnasio: 0,
     totalPiscina: 0,
-    totalTenisMesa: loans.length,
+    totalTenisMesa: totalActividad,
     reportesTenisMesa: reports.length,
     prestamosActivosTenis: activos,
     usuariosUnicos: userIds.size,
     usuariosUnicosTenisMesa: userIds.size,
+    mesaMasUsada,
+    usosMesaMasUsada: mesaMasUsada ? usosMesaMasUsada : undefined,
     porGenero,
     porEstamento,
     porFacultad,

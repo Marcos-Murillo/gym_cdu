@@ -218,12 +218,15 @@ export async function generateStats(
   const users = await getUsers()
   const allEntries = await getEntries()
   const usageCounts = await getUserServiceUsageCounts()
-  const { getAllTableTennisLoans } = await import("./table-tennis-storage")
-  const tenisLoans = await getAllTableTennisLoans()
+  const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
+  const [tenisLoans, tenisAccess] = await Promise.all([
+    getAllTableTennisLoans(),
+    getAllTableTennisAccess(),
+  ])
 
   const totalGimnasio = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").length
   const totalPiscina = allEntries.filter(e => e.instalacion === "piscina").length
-  const totalTenisMesa = tenisLoans.length
+  const totalTenisMesa = tenisLoans.length + tenisAccess.length
   const prestamosActivosTenis = tenisLoans.filter(l => l.estado === "activo").length
 
   const usuariosUnicosGimnasio = Object.values(usageCounts).filter(u => u.gimnasio > 0).length
@@ -397,11 +400,12 @@ export type UserServiceUsage = {
 
 /** Conteos por usuario: entradas gimnasio/piscina, casilleros y préstamos tenis de mesa. */
 export async function getUserServiceUsageCounts(): Promise<Record<string, UserServiceUsage>> {
-  const { getAllTableTennisLoans } = await import("./table-tennis-storage")
-  const [entries, lockers, tenisLoans] = await Promise.all([
+  const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
+  const [entries, lockers, tenisLoans, tenisAccess] = await Promise.all([
     getEntries(),
     getAllLockers(),
     getAllTableTennisLoans(),
+    getAllTableTennisAccess(),
   ])
   const counts: Record<string, UserServiceUsage> = {}
 
@@ -424,8 +428,13 @@ export async function getUserServiceUsageCounts(): Promise<Record<string, UserSe
   }
 
   for (const loan of tenisLoans) {
-    bump(loan.usuario1Id, "tenis_mesa")
-    bump(loan.usuario2Id, "tenis_mesa")
+    const uid = loan.usuarioId ?? loan.usuario1Id
+    if (uid) bump(uid, "tenis_mesa")
+    if (loan.usuario2Id) bump(loan.usuario2Id, "tenis_mesa")
+  }
+
+  for (const access of tenisAccess) {
+    bump(access.usuarioId, "tenis_mesa")
   }
 
   return counts

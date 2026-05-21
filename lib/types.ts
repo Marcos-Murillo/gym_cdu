@@ -90,17 +90,25 @@ export interface AttendanceRecord {
   duracionMinutos?: number
 }
 
+/** Registro público de control de acceso (cédula/código + mesa). */
+export interface TableTennisAccess {
+  id: string
+  usuarioId: string
+  usuarioNombre: string
+  usuarioDocumento: string
+  mesa: number
+  fecha: string
+  hora: string
+}
+
 export interface TableTennisLoan {
   id: string
   mesa: number
   raqueta1: number
   raqueta2: number
-  usuario1Id: string
-  usuario2Id: string
-  usuario1Nombre: string
-  usuario2Nombre: string
-  usuario1Documento: string
-  usuario2Documento: string
+  usuarioId: string
+  usuarioNombre: string
+  usuarioDocumento: string
   fecha: string
   horaInicio: string
   horaFin: string
@@ -108,6 +116,13 @@ export interface TableTennisLoan {
   monitorId?: string
   monitorNombre?: string
   devueltoAt?: string
+  /** Campos legacy (préstamos con dos usuarios). */
+  usuario1Id?: string
+  usuario2Id?: string
+  usuario1Nombre?: string
+  usuario2Nombre?: string
+  usuario1Documento?: string
+  usuario2Documento?: string
 }
 
 export interface TableTennisReport {
@@ -116,17 +131,23 @@ export interface TableTennisReport {
   mesa: number
   raqueta1: number
   raqueta2: number
-  usuario1Nombre: string
-  usuario2Nombre: string
-  usuario1Documento: string
-  usuario2Documento: string
+  usuarioNombre: string
+  usuarioDocumento: string
   fecha: string
   horaInicio: string
   horaFin: string
   fechaReporte: string
   horaReporte: string
   generadoPor?: string
+  usuario1Nombre?: string
+  usuario2Nombre?: string
+  usuario1Documento?: string
+  usuario2Documento?: string
 }
+
+export type TableTennisHistoryEntry =
+  | ({ tipo: "acceso" } & TableTennisAccess)
+  | ({ tipo: "prestamo" } & TableTennisLoan)
 
 export interface AttendanceStats {
   totalUsuarios: number
@@ -140,6 +161,8 @@ export interface AttendanceStats {
   usuariosUnicosGimnasio?: number
   usuariosUnicosPiscina?: number
   usuariosUnicosTenisMesa?: number
+  mesaMasUsada?: number
+  usosMesaMasUsada?: number
   porGenero: Record<string, number>
   porEstamento: Record<string, number>
   porFacultad: Record<string, number>

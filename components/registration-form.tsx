@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -10,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CheckCircle2, UserPlus, ChevronRight, ChevronLeft, Loader2 } from "lucide-react"
 import { GENEROS, GENEROS_LABELS, TIPOS_DOCUMENTO, ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import { saveUser, getUserByDocument } from "@/lib/storage"
-import type { FormData } from "@/lib/types"
+import type { FormData, UserProfile } from "@/lib/types"
 
 export function RegistrationForm() {
   const [currentStep, setCurrentStep] = useState(1)
@@ -34,6 +34,11 @@ export function RegistrationForm() {
   const requiresAcademicInfo = formData.estamento === "ESTUDIANTE" || formData.estamento === "EGRESADO" || formData.estamento === "DOCENTE"
   const requiresCodigoEstudiantil = formData.estamento === "ESTUDIANTE" || formData.estamento === "EGRESADO"
   const totalSteps = requiresAcademicInfo ? 3 : 2
+
+  // Si el estamento deja de requerir paso académico, no dejar colgado currentStep > totalSteps
+  useEffect(() => {
+    setCurrentStep((prev) => (prev > totalSteps ? totalSteps : prev))
+  }, [totalSteps])
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData((prev) => {
@@ -76,8 +81,11 @@ export function RegistrationForm() {
         return !!formData.estamento
       case 3:
         if (requiresAcademicInfo) {
-          const hasAcademicInfo = !!(formData.facultad && formData.programaAcademico)
-          const hasCodigoIfRequired = !requiresCodigoEstudiantil || (formData.codigoEstudiantil.length === 9)
+          const fac = formData.facultad.trim()
+          const prog = formData.programaAcademico.trim()
+          const hasAcademicInfo = !!(fac && prog)
+          const hasCodigoIfRequired =
+            !requiresCodigoEstudiantil || formData.codigoEstudiantil.trim().length === 9
           return hasAcademicInfo && hasCodigoIfRequired
         }
         return true
@@ -102,6 +110,21 @@ export function RegistrationForm() {
 
   const handleSubmit = async () => {
     setError("")
+
+    // Obligatorio: paso 3 completo si aplica (antes no se validaba al pulsar "Completar Registro")
+    if (!validateStep(1) || !validateStep(2)) {
+      setError("Revisa los datos de los pasos anteriores.")
+      return
+    }
+    if (requiresAcademicInfo && !validateStep(3)) {
+      setError(
+        requiresCodigoEstudiantil
+          ? "Selecciona facultad, programa académico y código estudiantil de 9 dígitos."
+          : "Selecciona facultad y programa académico."
+      )
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -113,18 +136,21 @@ export function RegistrationForm() {
         return
       }
 
-      // Preparar datos del usuario
-      const userData: any = {
-        nombres: formData.nombres,
-        correo: formData.correo,
+      const facultadTrim = formData.facultad.trim()
+      const programaTrim = formData.programaAcademico.trim()
+
+      // Facultad/programa solo aplican a estamentos con paso académico
+      const userData: Record<string, unknown> = {
+        nombres: formData.nombres.trim(),
+        correo: formData.correo.trim(),
         genero: formData.genero,
         tipoDocumento: formData.tipoDocumento,
-        numeroDocumento: formData.numeroDocumento,
-        edad: parseInt(formData.edad),
-        telefono: formData.telefono,
+        numeroDocumento: formData.numeroDocumento.trim(),
+        edad: parseInt(formData.edad, 10),
+        telefono: formData.telefono.trim(),
         estamento: formData.estamento,
-        facultad: formData.facultad || "N/A",
-        programaAcademico: formData.programaAcademico || "N/A",
+        facultad: requiresAcademicInfo ? facultadTrim : "",
+        programaAcademico: requiresAcademicInfo ? programaTrim : "",
       }
       
       // Solo agregar código estudiantil si tiene valor
@@ -133,7 +159,7 @@ export function RegistrationForm() {
       }
       
       // Guardar usuario
-      await saveUser(userData)
+      await saveUser(userData as Omit<UserProfile, "id" | "fechaRegistro" | "activo">)
 
       setSuccess(true)
     } catch (err) {

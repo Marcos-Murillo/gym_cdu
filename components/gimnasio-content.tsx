@@ -92,11 +92,13 @@ export default function GimnasioContent() {
               <Label htmlFor="codigo" className="sr-only">Buscar Usuario</Label>
               <Input
                 id="codigo"
+                type="text"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value)}
                 placeholder="Documento, nombre o codigo estudiantil..."
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                 className="text-lg h-12"
+                autoComplete="off"
               />
             </div>
             <Button onClick={handleSearch} disabled={!codigo || searching} className="bg-blue-600 hover:bg-blue-700 h-12 px-6">

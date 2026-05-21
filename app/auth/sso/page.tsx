@@ -72,7 +72,10 @@ function SSOHandler() {
 
 function getDefaultRedirect(user: SystemUser): string {
   if (user.rol === "superadmin") return "/superadmin"
-  if (user.rol === "admin") return "/usuarios"
+  if (user.rol === "admin") {
+    if (user.espacio === "tenis_mesa") return "/tenis-mesa"
+    return "/usuarios"
+  }
   if (user.rol === "encargado") return "/estadisticas"
   if (user.rol === "monitor") {
     if (user.espacio === "gimnasio") return "/gimnasio"

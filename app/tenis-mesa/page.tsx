@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import Link from "next/link"
 import { RouteGuard } from "@/components/route-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
@@ -22,10 +23,12 @@ import {
   CheckCircle2,
   Clock,
   FileWarning,
+  History,
   Table2,
   Bell,
+  DoorOpen,
 } from "lucide-react"
-import type { TableTennisLoan, TableTennisReport, UserProfile } from "@/lib/types"
+import type { TableTennisHistoryEntry, TableTennisLoan, TableTennisReport } from "@/lib/types"
 import {
   TOTAL_MESAS,
   formatMinutosRestantes,
@@ -37,7 +40,10 @@ import {
   createTableTennisLoan,
   createTableTennisReport,
   getActiveTableTennisLoans,
+  getTableTennisHistory,
   getTableTennisReports,
+  loanUsuarioDocumento,
+  loanUsuarioNombre,
   returnTableTennisPaddles,
 } from "@/lib/table-tennis-storage"
 
@@ -56,29 +62,31 @@ function TenisMesaContent() {
   const { user } = useAuth()
   const [activos, setActivos] = useState<TableTennisLoan[]>([])
   const [reportes, setReportes] = useState<TableTennisReport[]>([])
+  const [historial, setHistorial] = useState<TableTennisHistoryEntry[]>([])
   const [loadingData, setLoadingData] = useState(true)
   const [notifiedIds, setNotifiedIds] = useState<Set<string>>(new Set())
   const [expiryAlert, setExpiryAlert] = useState<string | null>(null)
 
   const [mesaSel, setMesaSel] = useState<number | null>(null)
-  const [busqueda1, setBusqueda1] = useState("")
-  const [busqueda2, setBusqueda2] = useState("")
-  const [usuario1, setUsuario1] = useState<UserProfile | null>(null)
-  const [usuario2, setUsuario2] = useState<UserProfile | null>(null)
-  const [error1, setError1] = useState("")
-  const [error2, setError2] = useState("")
+  const [busqueda, setBusqueda] = useState("")
+  const [usuario, setUsuario] = useState<import("@/lib/types").UserProfile | null>(null)
+  const [errorBusqueda, setErrorBusqueda] = useState("")
   const [errorPrestamo, setErrorPrestamo] = useState("")
-  const [buscando1, setBuscando1] = useState(false)
-  const [buscando2, setBuscando2] = useState(false)
+  const [buscando, setBuscando] = useState(false)
   const [prestando, setPrestando] = useState(false)
   const [successPrestamo, setSuccessPrestamo] = useState(false)
 
   const mesasOcupadas = useMemo(() => new Set(activos.map((l) => l.mesa)), [activos])
 
   const loadData = useCallback(async () => {
-    const [a, r] = await Promise.all([getActiveTableTennisLoans(), getTableTennisReports()])
+    const [a, r, h] = await Promise.all([
+      getActiveTableTennisLoans(),
+      getTableTennisReports(),
+      getTableTennisHistory(),
+    ])
     setActivos(a)
     setReportes(r)
+    setHistorial(h)
     setLoadingData(false)
   }, [])
 
@@ -113,67 +121,41 @@ function TenisMesaContent() {
     return () => clearInterval(interval)
   }, [activos, notifiedIds])
 
-  const buscarUsuario = async (
-    term: string,
-    slot: 1 | 2,
-  ) => {
-    if (!term.trim()) return
-    if (slot === 1) {
-      setError1("")
-      setUsuario1(null)
-      setBuscando1(true)
-    } else {
-      setError2("")
-      setUsuario2(null)
-      setBuscando2(true)
-    }
+  const buscarUsuario = async () => {
+    if (!busqueda.trim()) return
+    setErrorBusqueda("")
+    setUsuario(null)
+    setBuscando(true)
     try {
       const storage = await import("@/lib/storage")
-      const found = await storage.searchUserByCode(term.trim())
+      const found = await storage.searchUserByCode(busqueda.trim())
       if (!found) {
-        const msg = "Usuario no registrado. Debe estar en el sistema."
-        if (slot === 1) setError1(msg)
-        else setError2(msg)
-      } else if (
-        (slot === 1 && usuario2?.id === found.id) ||
-        (slot === 2 && usuario1?.id === found.id)
-      ) {
-        const msg = "Esta persona ya fue agregada."
-        if (slot === 1) setError1(msg)
-        else setError2(msg)
-      } else if (slot === 1) {
-        setUsuario1(found)
+        setErrorBusqueda("Usuario no registrado. Debe registrarse primero.")
       } else {
-        setUsuario2(found)
+        setUsuario(found)
       }
     } catch {
-      const msg = "Error al buscar."
-      if (slot === 1) setError1(msg)
-      else setError2(msg)
+      setErrorBusqueda("Error al buscar.")
     }
-    if (slot === 1) setBuscando1(false)
-    else setBuscando2(false)
+    setBuscando(false)
   }
 
   const handlePrestar = async () => {
-    if (!mesaSel || !usuario1 || !usuario2) return
+    if (!mesaSel || !usuario) return
     setErrorPrestamo("")
     setPrestando(true)
     setSuccessPrestamo(false)
     try {
       await createTableTennisLoan({
         mesa: mesaSel,
-        usuario1,
-        usuario2,
+        usuario,
         monitorId: user?.id,
         monitorNombre: user?.nombre,
       })
       setSuccessPrestamo(true)
       setMesaSel(null)
-      setBusqueda1("")
-      setBusqueda2("")
-      setUsuario1(null)
-      setUsuario2(null)
+      setBusqueda("")
+      setUsuario(null)
       await loadData()
       setTimeout(() => setSuccessPrestamo(false), 4000)
     } catch (err) {
@@ -207,8 +189,16 @@ function TenisMesaContent() {
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Tenis de mesa</h1>
         <p className="text-muted-foreground">
-          8 mesas · 16 raquetas · préstamo de 1 hora · 2 usuarios por mesa
+          8 mesas · 16 raquetas · préstamo 1 hora · 1 usuario por préstamo · máximo 1 préstamo por día
         </p>
+        <Link
+          href="/tenis-mesa/acceso"
+          target="_blank"
+          className="inline-flex items-center gap-1 text-sm text-violet-600 hover:underline"
+        >
+          <DoorOpen className="h-4 w-4" />
+          Abrir control de acceso (público)
+        </Link>
       </div>
 
       {expiryAlert && (
@@ -220,7 +210,7 @@ function TenisMesaContent() {
       )}
 
       <Tabs defaultValue="prestamo">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
           <TabsTrigger value="prestamo">Nuevo préstamo</TabsTrigger>
           <TabsTrigger value="activos">
             Activos
@@ -230,6 +220,7 @@ function TenisMesaContent() {
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="historial">Historial</TabsTrigger>
           <TabsTrigger value="reportes">Reportes</TabsTrigger>
         </TabsList>
 
@@ -240,9 +231,7 @@ function TenisMesaContent() {
                 <Table2 className="h-5 w-5 text-violet-600" />
                 Seleccionar mesa
               </CardTitle>
-              <CardDescription>
-                Cada mesa incluye 2 raquetas numeradas consecutivamente
-              </CardDescription>
+              <CardDescription>Mesas 1 a {TOTAL_MESAS} · 2 raquetas por mesa</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -285,39 +274,24 @@ function TenisMesaContent() {
               <CardHeader>
                 <CardTitle>Mesa {mesaSel}</CardTitle>
                 <CardDescription>
-                  Raquetas {raquetasForMesa(mesaSel)[0]} y {raquetasForMesa(mesaSel)[1]} · duración 1 hora
+                  Raquetas {raquetasForMesa(mesaSel)[0]} y {raquetasForMesa(mesaSel)[1]} · 1 hora
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <TableTennisUserSearch
-                  id="tenis-busqueda-1"
-                  label="Persona 1 (registrada en el sistema)"
-                  busqueda={busqueda1}
-                  onBusquedaChange={setBusqueda1}
-                  usuario={usuario1}
+                  id="tenis-busqueda-prestamo"
+                  label="Usuario (registrado en el sistema)"
+                  busqueda={busqueda}
+                  onBusquedaChange={setBusqueda}
+                  usuario={usuario}
                   onClearUsuario={() => {
-                    setUsuario1(null)
-                    setBusqueda1("")
+                    setUsuario(null)
+                    setBusqueda("")
                   }}
-                  error={error1}
-                  onClearError={() => setError1("")}
-                  buscando={buscando1}
-                  onSearch={() => buscarUsuario(busqueda1, 1)}
-                />
-                <TableTennisUserSearch
-                  id="tenis-busqueda-2"
-                  label="Persona 2 (registrada en el sistema)"
-                  busqueda={busqueda2}
-                  onBusquedaChange={setBusqueda2}
-                  usuario={usuario2}
-                  onClearUsuario={() => {
-                    setUsuario2(null)
-                    setBusqueda2("")
-                  }}
-                  error={error2}
-                  onClearError={() => setError2("")}
-                  buscando={buscando2}
-                  onSearch={() => buscarUsuario(busqueda2, 2)}
+                  error={errorBusqueda}
+                  onClearError={() => setErrorBusqueda("")}
+                  buscando={buscando}
+                  onSearch={buscarUsuario}
                 />
 
                 {errorPrestamo && (
@@ -334,7 +308,7 @@ function TenisMesaContent() {
 
                 <Button
                   className="w-full bg-violet-600 hover:bg-violet-700"
-                  disabled={!usuario1 || !usuario2 || prestando}
+                  disabled={!usuario || prestando}
                   onClick={handlePrestar}
                 >
                   <CircleDot className="h-4 w-4 mr-2" />
@@ -369,7 +343,7 @@ function TenisMesaContent() {
                       <CardContent className="pt-6">
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div>
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Badge className="bg-violet-600">Mesa {loan.mesa}</Badge>
                               <Badge variant="outline">
                                 Raquetas {loan.raqueta1} y {loan.raqueta2}
@@ -383,13 +357,12 @@ function TenisMesaContent() {
                                 </Badge>
                               )}
                             </div>
-                            <p className="mt-2 text-sm">
-                              <span className="font-medium">{loan.usuario1Nombre}</span>
-                              {" · "}
-                              <span className="font-medium">{loan.usuario2Nombre}</span>
+                            <p className="mt-2 text-sm font-medium">
+                              {loanUsuarioNombre(loan)}
                             </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {loan.fecha} · inicio {loan.horaInicio} · fin {loan.horaFin}
+                            <p className="text-xs text-muted-foreground">
+                              {loanUsuarioDocumento(loan)} · {loan.fecha} · {loan.horaInicio} –{" "}
+                              {loan.horaFin}
                             </p>
                           </div>
                           <div className="flex flex-col gap-2 sm:flex-row">
@@ -421,12 +394,90 @@ function TenisMesaContent() {
           )}
         </TabsContent>
 
+        <TabsContent value="historial" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <History className="h-5 w-5" />
+                Historial de uso y préstamos
+              </CardTitle>
+              <CardDescription>
+                Accesos del control público y préstamos de mesa/raquetas
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingData ? (
+                <p className="text-center text-muted-foreground py-8">Cargando...</p>
+              ) : historial.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">Sin registros.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Mesa</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Hora</TableHead>
+                      <TableHead>Detalle</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {historial.map((entry) =>
+                      entry.tipo === "acceso" ? (
+                        <TableRow key={`a-${entry.id}`}>
+                          <TableCell>
+                            <Badge variant="outline" className="border-blue-300 text-blue-700">
+                              Acceso
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm font-medium">{entry.usuarioNombre}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {entry.usuarioDocumento}
+                            </p>
+                          </TableCell>
+                          <TableCell>{entry.mesa}</TableCell>
+                          <TableCell>{entry.fecha}</TableCell>
+                          <TableCell>{entry.hora}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            Control de acceso
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        <TableRow key={`p-${entry.id}`}>
+                          <TableCell>
+                            <Badge className="bg-violet-600">Préstamo</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-sm font-medium">{loanUsuarioNombre(entry)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {loanUsuarioDocumento(entry)}
+                            </p>
+                          </TableCell>
+                          <TableCell>{entry.mesa}</TableCell>
+                          <TableCell>{entry.fecha}</TableCell>
+                          <TableCell>{entry.horaInicio}</TableCell>
+                          <TableCell className="text-xs">
+                            R{entry.raqueta1}-{entry.raqueta2} · {entry.estado}
+                            {entry.horaFin ? ` · fin ${entry.horaFin}` : ""}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="reportes" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle>Reportes de no devolución</CardTitle>
               <CardDescription>
-                Registro cuando el tiempo venció y las raquetas no fueron devueltas
+                Cuando el tiempo venció y las raquetas no fueron devueltas
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -437,10 +488,9 @@ function TenisMesaContent() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Mesa</TableHead>
-                      <TableHead>Usuarios</TableHead>
+                      <TableHead>Usuario</TableHead>
                       <TableHead>Fecha préstamo</TableHead>
                       <TableHead>Horario</TableHead>
-                      <TableHead>Reporte</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -450,19 +500,14 @@ function TenisMesaContent() {
                           {r.mesa} (R{r.raqueta1}-{r.raqueta2})
                         </TableCell>
                         <TableCell>
-                          <div className="text-sm">
-                            <p>{r.usuario1Nombre}</p>
-                            <p className="text-muted-foreground">{r.usuario1Documento}</p>
-                            <p className="mt-1">{r.usuario2Nombre}</p>
-                            <p className="text-muted-foreground">{r.usuario2Documento}</p>
-                          </div>
+                          <p>{r.usuarioNombre ?? r.usuario1Nombre}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {r.usuarioDocumento ?? r.usuario1Documento}
+                          </p>
                         </TableCell>
                         <TableCell>{r.fecha}</TableCell>
                         <TableCell>
                           {r.horaInicio} – {r.horaFin}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {r.fechaReporte} {r.horaReporte}
                         </TableCell>
                       </TableRow>
                     ))}
