@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore"
 import { db } from "./firebase"
 import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord } from "./types"
+import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -148,11 +149,17 @@ export async function getEntries(): Promise<EntryRecord[]> {
   })) as EntryRecord[]
 }
 
-export async function saveEntry(usuarioId: string, instalacion: "gimnasio" | "piscina" = "gimnasio"): Promise<EntryRecord> {
+export async function saveEntry(
+  usuarioId: string,
+  instalacion: "gimnasio" | "piscina" = "gimnasio",
+  sede?: Sede,
+): Promise<EntryRecord> {
   const now = new Date()
+  const campus = resolveSede(sede)
   const newEntry = {
     usuarioId,
     instalacion,
+    sede: campus,
     fecha: now.toISOString().split("T")[0],
     hora: now.toTimeString().split(" ")[0],
   }
@@ -181,9 +188,12 @@ export async function getBiometricData(): Promise<BiometricData[]> {
   })) as BiometricData[]
 }
 
-export async function saveBiometricData(data: Omit<BiometricData, "id" | "fecha">): Promise<BiometricData> {
+export async function saveBiometricData(
+  data: Omit<BiometricData, "id" | "fecha"> & { sede?: Sede },
+): Promise<BiometricData> {
   const newRecord = {
     ...data,
+    sede: resolveSede(data.sede),
     fecha: new Date().toISOString(),
   }
   const docRef = await addDoc(collection(db, BIOMETRIC_COLLECTION), newRecord)
@@ -214,38 +224,44 @@ export async function generateStats(
   instalacion?: "gimnasio" | "piscina",
   fechaDesde?: string,
   fechaHasta?: string,
+  sedeFiltro?: SedeFiltro,
 ): Promise<AttendanceStats> {
   const users = await getUsers()
-  const allEntries = await getEntries()
-  const usageCounts = await getUserServiceUsageCounts()
+  const allEntries = filterBySede(await getEntries(), sedeFiltro)
+  const usageCounts = await getUserServiceUsageCounts(sedeFiltro)
   const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
-  const [tenisLoans, tenisAccess] = await Promise.all([
+  const [tenisLoansRaw, tenisAccessRaw] = await Promise.all([
     getAllTableTennisLoans(),
     getAllTableTennisAccess(),
   ])
+  const tenisLoans = filterBySede(tenisLoansRaw, sedeFiltro)
+  const tenisAccess = filterBySede(tenisAccessRaw, sedeFiltro)
 
-  const totalGimnasio = allEntries.filter(e => (e.instalacion ?? "gimnasio") === "gimnasio").length
-  const totalPiscina = allEntries.filter(e => e.instalacion === "piscina").length
+  const totalGimnasio = allEntries.filter((e) => (e.instalacion ?? "gimnasio") === "gimnasio").length
+  const totalPiscina = allEntries.filter((e) => e.instalacion === "piscina").length
   const totalTenisMesa = tenisLoans.length + tenisAccess.length
-  const prestamosActivosTenis = tenisLoans.filter(l => l.estado === "activo").length
+  const prestamosActivosTenis = tenisLoans.filter((l) => l.estado === "activo").length
 
-  const usuariosUnicosGimnasio = Object.values(usageCounts).filter(u => u.gimnasio > 0).length
-  const usuariosUnicosPiscina  = Object.values(usageCounts).filter(u => u.piscina > 0).length
-  const usuariosUnicosTenisMesa = Object.values(usageCounts).filter(u => u.tenis_mesa > 0).length
+  const usuariosUnicosGimnasio = Object.values(usageCounts).filter((u) => u.gimnasio > 0).length
+  const usuariosUnicosPiscina = Object.values(usageCounts).filter((u) => u.piscina > 0).length
+  const usuariosUnicosTenisMesa = Object.values(usageCounts).filter((u) => u.tenis_mesa > 0).length
 
-  // Filtrar entradas por instalacion si se especifica
   let entries = instalacion
-    ? allEntries.filter(e => (e.instalacion ?? "gimnasio") === instalacion)
+    ? allEntries.filter((e) => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
 
-  // Filtrar por rango de fechas si se especifica
-  if (fechaDesde) entries = entries.filter(e => e.fecha >= fechaDesde!)
-  if (fechaHasta) entries = entries.filter(e => e.fecha <= fechaHasta!)
+  if (fechaDesde) entries = entries.filter((e) => e.fecha >= fechaDesde!)
+  if (fechaHasta) entries = entries.filter((e) => e.fecha <= fechaHasta!)
 
-  // Usuarios únicos del espacio filtrado
   let usuariosUnicos: number | undefined
   if (instalacion === "gimnasio") usuariosUnicos = usuariosUnicosGimnasio
   else if (instalacion === "piscina") usuariosUnicos = usuariosUnicosPiscina
+
+  const userIdsWithActivity = new Set(entries.map((e) => e.usuarioId))
+  const usersForDemographics =
+    sedeFiltro && sedeFiltro !== "todas"
+      ? users.filter((u) => userIdsWithActivity.has(u.id))
+      : users
 
   const porGenero: Record<string, number> = {}
   const porEstamento: Record<string, number> = {}
@@ -254,7 +270,7 @@ export async function generateStats(
   const entradasPorDiaMap: Record<string, number> = {}
   const entradasPorHoraMap: Record<string, number> = {}
 
-  users.forEach((user) => {
+  usersForDemographics.forEach((user) => {
     porGenero[user.genero] = (porGenero[user.genero] || 0) + 1
     porEstamento[user.estamento] = (porEstamento[user.estamento] || 0) + 1
     const fac = normalizeAcademicField(user.facultad)
@@ -283,7 +299,7 @@ export async function generateStats(
     .sort((a, b) => a.hora.localeCompare(b.hora))
 
   return {
-    totalUsuarios: users.length,
+    totalUsuarios: usersForDemographics.length,
     totalEntradas: entries.length,
     totalGimnasio,
     totalPiscina,
@@ -339,17 +355,24 @@ function generateToken(): string {
   return `${l1}${l2}${n1}${n2}${n3}`
 }
 
-export async function getActiveLockers(): Promise<LockerRecord[]> {
+export async function getActiveLockers(sede?: Sede): Promise<LockerRecord[]> {
   const q = query(collection(db, LOCKERS_COLLECTION), where("estado", "==", "ocupado"))
   const querySnapshot = await getDocs(q)
-  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as LockerRecord[]
+  const all = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as LockerRecord[]
+  if (!sede) return all
+  const campus = resolveSede(sede)
+  return all.filter((l) => resolveSede(l.sede) === campus)
 }
 
-export async function createLockerRecord(casillero: string, usuarioId: string): Promise<LockerRecord> {
+export async function createLockerRecord(
+  casillero: string,
+  usuarioId: string,
+  sede?: Sede,
+): Promise<LockerRecord> {
+  const campus = resolveSede(sede)
   const now = new Date()
-  // Asegurar token único
-  const activeLockers = await getActiveLockers()
-  const usedTokens = new Set(activeLockers.map(l => l.token))
+  const activeLockers = await getActiveLockers(campus)
+  const usedTokens = new Set(activeLockers.map((l) => l.token))
   let token = generateToken()
   let attempts = 0
   while (usedTokens.has(token) && attempts < 20) {
@@ -361,6 +384,7 @@ export async function createLockerRecord(casillero: string, usuarioId: string): 
     casillero,
     token,
     usuarioId,
+    sede: campus,
     fechaIngreso: now.toISOString().split("T")[0],
     horaIngreso: now.toTimeString().split(" ")[0],
     estado: "ocupado",
@@ -378,10 +402,14 @@ export async function releaseLocker(id: string, motivo?: string): Promise<void> 
   })
 }
 
-export async function validateLockerToken(casillero: string, token: string): Promise<LockerRecord | null> {
-  const activeLockers = await getActiveLockers()
+export async function validateLockerToken(
+  casillero: string,
+  token: string,
+  sede?: Sede,
+): Promise<LockerRecord | null> {
+  const activeLockers = await getActiveLockers(sede)
   const match = activeLockers.find(
-    l => l.casillero === casillero && l.token.toUpperCase() === token.toUpperCase()
+    (l) => l.casillero === casillero && l.token.toUpperCase() === token.toUpperCase(),
   )
   return match ?? null
 }
@@ -399,14 +427,18 @@ export type UserServiceUsage = {
 }
 
 /** Conteos por usuario: entradas gimnasio/piscina, casilleros y préstamos tenis de mesa. */
-export async function getUserServiceUsageCounts(): Promise<Record<string, UserServiceUsage>> {
+export async function getUserServiceUsageCounts(sedeFiltro?: SedeFiltro): Promise<Record<string, UserServiceUsage>> {
   const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
-  const [entries, lockers, tenisLoans, tenisAccess] = await Promise.all([
+  const [entries, lockers, tenisLoansRaw, tenisAccessRaw] = await Promise.all([
     getEntries(),
     getAllLockers(),
     getAllTableTennisLoans(),
     getAllTableTennisAccess(),
   ])
+  const entriesF = filterBySede(entries, sedeFiltro)
+  const lockersF = filterBySede(lockers, sedeFiltro)
+  const tenisLoans = filterBySede(tenisLoansRaw, sedeFiltro)
+  const tenisAccess = filterBySede(tenisAccessRaw, sedeFiltro)
   const counts: Record<string, UserServiceUsage> = {}
 
   const bump = (userId: string, key: keyof UserServiceUsage) => {
@@ -417,13 +449,13 @@ export async function getUserServiceUsageCounts(): Promise<Record<string, UserSe
     counts[userId][key]++
   }
 
-  for (const e of entries) {
+  for (const e of entriesF) {
     const inst = e.instalacion ?? "gimnasio"
     if (inst === "piscina") bump(e.usuarioId, "piscina")
     else bump(e.usuarioId, "gimnasio")
   }
 
-  for (const l of lockers) {
+  for (const l of lockersF) {
     bump(l.usuarioId, "guardarropas")
   }
 
@@ -461,12 +493,18 @@ export async function getTodayAttendance(monitorId: string): Promise<AttendanceR
   return { id: d.id, ...d.data() } as AttendanceRecord
 }
 
-export async function registerAttendanceEntry(monitorId: string, monitorNombre: string, espacio: string): Promise<AttendanceRecord> {
+export async function registerAttendanceEntry(
+  monitorId: string,
+  monitorNombre: string,
+  espacio: string,
+  sede?: Sede,
+): Promise<AttendanceRecord> {
   const now = new Date()
   const record = {
     monitorId,
     monitorNombre,
     espacio,
+    sede: resolveSede(sede),
     fecha: now.toISOString().split("T")[0],
     horaEntrada: now.toTimeString().slice(0, 5),
   }

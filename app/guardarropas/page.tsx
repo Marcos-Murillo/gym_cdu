@@ -21,6 +21,8 @@ import {
   User,
 } from "lucide-react"
 import type { LockerRecord, UserProfile } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
+import { getStaffSede } from "@/lib/sede"
 
 export default function GuardarropasPage() {
   return (
@@ -31,6 +33,8 @@ export default function GuardarropasPage() {
 }
 
 function GuardarropasContent() {
+  const { user } = useAuth()
+  const staffSede = getStaffSede(user)
   // Tab: depositar — paso 1: buscar usuario
   const [busqueda, setBusqueda] = useState("")
   const [usuarioEncontrado, setUsuarioEncontrado] = useState<UserProfile | null>(null)
@@ -77,14 +81,18 @@ function GuardarropasContent() {
     setLoadingDeposito(true)
     try {
       const storage = await import("@/lib/storage")
-      const activos = await storage.getActiveLockers()
-      const ocupado = activos.find(l => l.casillero === casilleroDeposito.trim())
+      const activos = await storage.getActiveLockers(staffSede)
+      const ocupado = activos.find((l) => l.casillero === casilleroDeposito.trim())
       if (ocupado) {
-        setErrorDeposito(`El casillero ${casilleroDeposito} ya está ocupado.`)
+        setErrorDeposito(`El casillero ${casilleroDeposito} ya está ocupado en esta sede.`)
         setLoadingDeposito(false)
         return
       }
-      const record = await storage.createLockerRecord(casilleroDeposito.trim(), usuarioEncontrado.id)
+      const record = await storage.createLockerRecord(
+        casilleroDeposito.trim(),
+        usuarioEncontrado.id,
+        staffSede,
+      )
       setLockerCreado(record)
     } catch (err) {
       console.error(err)
@@ -109,7 +117,11 @@ function GuardarropasContent() {
     setLoadingRetiro(true)
     try {
       const storage = await import("@/lib/storage")
-      const record = await storage.validateLockerToken(casilleroRetiro.trim(), tokenRetiro.trim())
+      const record = await storage.validateLockerToken(
+        casilleroRetiro.trim(),
+        tokenRetiro.trim(),
+        staffSede,
+      )
       if (!record) {
         setErrorRetiro("Token incorrecto o casillero no encontrado. No se puede entregar el bolso.")
         setLoadingRetiro(false)

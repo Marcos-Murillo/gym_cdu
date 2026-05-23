@@ -22,6 +22,8 @@ import {
   Waves,
 } from "lucide-react"
 import type { UserProfile, EntryRecord } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
+import { getStaffSede } from "@/lib/sede"
 
 export default function PiscinaPage() {
   return (
@@ -32,6 +34,7 @@ export default function PiscinaPage() {
 }
 
 function PiscinaContent() {
+  const { user } = useAuth()
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [entradas, setEntradas] = useState<EntryRecord[]>([])
@@ -69,7 +72,7 @@ function PiscinaContent() {
     if (!usuario) return
 
     const storage = await import("@/lib/storage")
-    await storage.saveEntry(usuario.id, "piscina")
+    await storage.saveEntry(usuario.id, "piscina", getStaffSede(user))
     setSuccess(true)
 
     const userEntries = await storage.getEntriesByUser(usuario.id)

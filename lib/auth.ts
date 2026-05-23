@@ -1,6 +1,7 @@
-import { collection, doc, getDocs, getDoc, addDoc, updateDoc, query, where } from "firebase/firestore"
+import { collection, doc, getDocs, addDoc, updateDoc } from "firebase/firestore"
 import { db } from "./firebase"
 import type { SystemUser, UserRole, Espacio } from "./types"
+import { getSedeForNewStaff, resolveSede, type Sede } from "./sede"
 
 const SYSTEM_USERS_COLLECTION = "systemUsers"
 
@@ -15,9 +16,19 @@ function simpleHash(str: string): string {
   return hash.toString(36)
 }
 
+function normalizeSystemUser(id: string, data: Record<string, unknown>): SystemUser {
+  const raw = { id, ...data } as SystemUser
+  return { ...raw, sede: resolveSede(raw.sede as string | undefined) }
+}
+
 export async function getSystemUsers(): Promise<SystemUser[]> {
   const snap = await getDocs(collection(db, SYSTEM_USERS_COLLECTION))
-  return snap.docs.map(d => ({ id: d.id, ...d.data() })) as SystemUser[]
+  return snap.docs.map((d) => normalizeSystemUser(d.id, d.data() as Record<string, unknown>))
+}
+
+export async function getSystemUserByCedula(cedula: string): Promise<SystemUser | null> {
+  const users = await getSystemUsers()
+  return users.find((u) => u.cedula === cedula) ?? null
 }
 
 export async function createSystemUser(data: {
@@ -26,26 +37,37 @@ export async function createSystemUser(data: {
   password: string
   rol: UserRole
   espacio?: Espacio
+  sede?: Sede
   creadoPor: string
+  creator?: SystemUser
 }): Promise<SystemUser> {
+  const creator = data.creator ?? (await getSystemUsers()).find((u) => u.id === data.creadoPor)
+  const sede =
+    creator && data.rol !== "superadmin"
+      ? getSedeForNewStaff(creator, data.sede)
+      : data.sede
+        ? resolveSede(data.sede)
+        : resolveSede(undefined)
+
   const newUser = {
     nombre: data.nombre,
     cedula: data.cedula,
     passwordHash: simpleHash(data.password),
     rol: data.rol,
     espacio: data.espacio ?? null,
+    sede: data.rol === "superadmin" ? (data.sede ? resolveSede(data.sede) : null) : sede,
     creadoPor: data.creadoPor,
     fechaCreacion: new Date().toISOString(),
     activo: true,
   }
   const ref = await addDoc(collection(db, SYSTEM_USERS_COLLECTION), newUser)
-  return { ...newUser, id: ref.id } as SystemUser
+  return normalizeSystemUser(ref.id, newUser as Record<string, unknown>)
 }
 
 export async function loginSystemUser(cedula: string, password: string): Promise<SystemUser | null> {
   const users = await getSystemUsers()
   const hash = simpleHash(password)
-  const user = users.find(u => u.cedula === cedula && u.passwordHash === hash && u.activo)
+  const user = users.find((u) => u.cedula === cedula && u.passwordHash === hash && u.activo)
   return user ?? null
 }
 
@@ -69,7 +91,8 @@ export async function ensureSuperAdmin(): Promise<void> {
 }
 
 // Sesión en localStorage
-const SESSION_KEY = "gymcontrol_session"
+const SESSION_KEY = "cducontrol_session"
+const LEGACY_SESSION_KEY = "gymcontrol_session"
 
 export function saveSession(user: SystemUser): void {
   if (typeof window !== "undefined") {
@@ -79,7 +102,14 @@ export function saveSession(user: SystemUser): void {
 
 export function getSession(): SystemUser | null {
   if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(SESSION_KEY)
+  let raw = localStorage.getItem(SESSION_KEY)
+  if (!raw) {
+    raw = localStorage.getItem(LEGACY_SESSION_KEY)
+    if (raw) {
+      localStorage.setItem(SESSION_KEY, raw)
+      localStorage.removeItem(LEGACY_SESSION_KEY)
+    }
+  }
   if (!raw) return null
   try {
     return JSON.parse(raw) as SystemUser
@@ -91,6 +121,7 @@ export function getSession(): SystemUser | null {
 export function clearSession(): void {
   if (typeof window !== "undefined") {
     localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(LEGACY_SESSION_KEY)
   }
 }
 

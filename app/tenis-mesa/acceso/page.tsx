@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -14,13 +15,25 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, CircleDot, Table2, UserPlus } from "lucide-react"
+import { CheckCircle2, CircleDot, MapPin, Table2, UserPlus } from "lucide-react"
 import { TOTAL_MESAS } from "@/lib/table-tennis-utils"
 import { createTableTennisAccess } from "@/lib/table-tennis-storage"
+import { sedeFromQueryParam, SEDE_LABELS, SEDES_ACTIVAS, type Sede } from "@/lib/sede"
 import type { UserProfile } from "@/lib/types"
 
 export default function TenisMesaAccesoPage() {
+  return (
+    <Suspense>
+      <TenisMesaAccesoContent />
+    </Suspense>
+  )
+}
+
+function TenisMesaAccesoContent() {
+  const searchParams = useSearchParams()
+  const sedeInicial = sedeFromQueryParam(searchParams.get("sede"))
+
+  const [sede, setSede] = useState<Sede | "">(sedeInicial)
   const [busqueda, setBusqueda] = useState("")
   const [mesa, setMesa] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
@@ -50,15 +63,19 @@ export default function TenisMesaAccesoPage() {
   }
 
   const handleRegistrarAcceso = async () => {
-    const mesaNum = parseInt(mesa, 10)
-    if (!usuario || !mesa) {
-      setError("Selecciona la mesa en la que vas a jugar.")
+    if (!sede) {
+      setError("Indica en qué sede vas a jugar (Melendez o San Fernando).")
       return
     }
+    if (!usuario || !mesa) {
+      setError("Busca tu usuario y selecciona la mesa.")
+      return
+    }
+    const mesaNum = parseInt(mesa, 10)
     setError("")
     setRegistrando(true)
     try {
-      await createTableTennisAccess(usuario, mesaNum)
+      await createTableTennisAccess(usuario, mesaNum, sede)
       setSuccess(true)
       setBusqueda("")
       setMesa("")
@@ -73,7 +90,7 @@ export default function TenisMesaAccesoPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <div className="space-y-2 text-center">
         <h1 className="text-3xl font-bold text-foreground">Control de acceso</h1>
-        <p className="text-muted-foreground">Tenis de mesa · CDU GymControl</p>
+        <p className="text-muted-foreground">Tenis de mesa · CDUControl</p>
       </div>
 
       <Card className="border-violet-200">
@@ -83,10 +100,36 @@ export default function TenisMesaAccesoPage() {
             Ingreso a jugar
           </CardTitle>
           <CardDescription>
-            Ingresa tu cédula o código estudiantil y el número de mesa que vas a usar
+            Indica la sede donde juegas, tu cédula o código y la mesa que vas a usar
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="acceso-sede" className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              ¿En qué sede vas a jugar?
+            </Label>
+            <Select
+              value={sede || undefined}
+              onValueChange={(v) => {
+                setSede(v as Sede)
+                setError("")
+                setSuccess(false)
+              }}
+            >
+              <SelectTrigger id="acceso-sede" className="h-11 text-base">
+                <SelectValue placeholder="Selecciona Melendez o San Fernando" />
+              </SelectTrigger>
+              <SelectContent>
+                {SEDES_ACTIVAS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {SEDE_LABELS[s]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="acceso-busqueda">Cédula o código estudiantil</Label>
             <div className="flex gap-2">
@@ -158,11 +201,11 @@ export default function TenisMesaAccesoPage() {
             </Alert>
           )}
 
-          {success && (
+          {success && sede && (
             <Alert className="border-emerald-300 bg-emerald-50">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               <AlertDescription className="text-emerald-800">
-                Acceso registrado correctamente. ¡Buen juego!
+                Acceso registrado en {SEDE_LABELS[sede]}. ¡Buen juego!
               </AlertDescription>
             </Alert>
           )}
@@ -170,7 +213,7 @@ export default function TenisMesaAccesoPage() {
           <Button
             type="button"
             className="w-full bg-violet-600 hover:bg-violet-700 h-11"
-            disabled={!usuario || !mesa || registrando}
+            disabled={!sede || !usuario || !mesa || registrando}
             onClick={handleRegistrarAcceso}
           >
             {registrando ? "Registrando..." : "Registrar acceso"}

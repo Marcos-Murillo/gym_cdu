@@ -22,6 +22,8 @@ import {
   getUsers, getBiometricData, updateBiometricData
 } from "@/lib/storage"
 import type { UserProfile, BiometricData } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
+import { filterBySede, getStaffSede } from "@/lib/sede"
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -36,6 +38,8 @@ export default function BiometricoPage() {
 }
 
 function BiometricoContent() {
+  const { user } = useAuth()
+  const staffSede = getStaffSede(user)
   // Datos globales
   const [allRecords, setAllRecords] = useState<BiometricData[]>([])
   const [allUsers, setAllUsers] = useState<UserProfile[]>([])
@@ -63,12 +67,14 @@ function BiometricoContent() {
     circunferenciaCintura: "", circunferenciaCadera: "", frecuenciaCardiacaReposo: "", notas: "",
   })
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [staffSede, user?.rol])
 
   const loadData = async () => {
     setLoading(true)
     const [records, users] = await Promise.all([getBiometricData(), getUsers()])
-    setAllRecords(records.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()))
+    const campusRecords =
+      user?.rol === "superadmin" ? records : filterBySede(records, staffSede)
+    setAllRecords(campusRecords.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()))
     setAllUsers(users)
     setLoading(false)
   }
@@ -135,7 +141,9 @@ function BiometricoContent() {
     const altura = parseFloat(newForm.altura)
     const peso = parseFloat(newForm.peso)
     await saveBiometricData({
-      usuarioId: docUser.id, altura, peso,
+      usuarioId: docUser.id,
+      sede: staffSede,
+      altura, peso,
       imc: calculateIMC(peso, altura),
       grasaCorporal: newForm.grasaCorporal ? parseFloat(newForm.grasaCorporal) : 0,
       masaMuscular: newForm.masaMuscular ? parseFloat(newForm.masaMuscular) : 0,
@@ -182,7 +190,7 @@ function BiometricoContent() {
     if (editDialog.mode === "edit") {
       await updateBiometricData(editDialog.record.id, payload)
     } else {
-      await saveBiometricData({ usuarioId: editDialog.record.usuarioId, ...payload })
+      await saveBiometricData({ usuarioId: editDialog.record.usuarioId, sede: staffSede, ...payload })
     }
     setEditDialog({ open: false, record: null, mode: "edit" })
     loadData()

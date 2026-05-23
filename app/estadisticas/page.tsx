@@ -14,8 +14,17 @@ import {
 } from "lucide-react"
 import { generateStats } from "@/lib/storage"
 import { generateTableTennisStats } from "@/lib/table-tennis-storage"
-import { generateGymPDFReport } from "@/lib/pdf-generator"
+import { generateGymPDFReport, generateGymPDFReportCompleto } from "@/lib/pdf-generator"
 import type { AttendanceStats } from "@/lib/types"
+import { useAuth } from "@/lib/auth-context"
+import {
+  canViewAllSedes,
+  getStaffSede,
+  SEDE_LABELS,
+  SEDES_ACTIVAS,
+  type Sede,
+  type SedeFiltro,
+} from "@/lib/sede"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend,
@@ -34,57 +43,86 @@ export default function EstadisticasPage() {
 }
 
 function EstadisticasContent() {
+  const { user } = useAuth()
   const [stats, setStats] = useState<AttendanceStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Filtro>("todas")
+  const [filtroSede, setFiltroSede] = useState<SedeFiltro>("todas")
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
+  const [pdfCompleto, setPdfCompleto] = useState(false)
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
+
+  const puedeVerTodasSedes = user ? canViewAllSedes(user.rol) : false
+  const sedeEfectiva: SedeFiltro = puedeVerTodasSedes ? filtroSede : getStaffSede(user)
 
   useEffect(() => {
     const loadStats = async () => {
       setLoading(true)
       if (filtro === "tenis_mesa") {
-        const data = await generateTableTennisStats()
+        const data = await generateTableTennisStats(
+          undefined,
+          undefined,
+          sedeEfectiva,
+        )
         setStats(data)
       } else {
         const instalacion = filtro === "todas" ? undefined : filtro
-        const data = await generateStats(instalacion)
+        const data = await generateStats(instalacion, undefined, undefined, sedeEfectiva)
         setStats(data)
       }
       setLoading(false)
     }
-    loadStats()
-  }, [filtro])
+    if (user) loadStats()
+  }, [filtro, sedeEfectiva, user])
 
   const handleOpenPdfDialog = () => {
     setFechaDesde("")
     setFechaHasta("")
+    setPdfCompleto(false)
     setPdfDialogOpen(true)
   }
 
   const handleGeneratePDF = async () => {
-    if (!stats) return
+    if (!stats || !user) return
     setPdfLoading(true)
     setPdfDialogOpen(false)
     try {
-      const statsWithRange =
-        filtro === "tenis_mesa"
-          ? await generateTableTennisStats(
-              fechaDesde || undefined,
-              fechaHasta || undefined,
-            )
-          : await generateStats(
-              filtro === "todas" ? undefined : filtro,
-              fechaDesde || undefined,
-              fechaHasta || undefined,
-            )
-      generateGymPDFReport(
-        statsWithRange,
-        filtro,
-        { desde: fechaDesde || undefined, hasta: fechaHasta || undefined },
-      )
+      const range = { desde: fechaDesde || undefined, hasta: fechaHasta || undefined }
+      const desde = fechaDesde || undefined
+      const hasta = fechaHasta || undefined
+
+      if (pdfCompleto && puedeVerTodasSedes && filtroSede === "todas") {
+        const loadFor = async (sede: SedeFiltro) =>
+          filtro === "tenis_mesa"
+            ? generateTableTennisStats(desde, hasta, sede)
+            : generateStats(
+                filtro === "todas" ? undefined : filtro,
+                desde,
+                hasta,
+                sede,
+              )
+        const [global, melendez, sanFernando] = await Promise.all([
+          loadFor("todas"),
+          loadFor("melendez"),
+          loadFor("san_fernando"),
+        ])
+        generateGymPDFReportCompleto(global, melendez, sanFernando, filtro, range)
+      } else {
+        const statsWithRange =
+          filtro === "tenis_mesa"
+            ? await generateTableTennisStats(desde, hasta, sedeEfectiva)
+            : await generateStats(
+                filtro === "todas" ? undefined : filtro,
+                desde,
+                hasta,
+                sedeEfectiva,
+              )
+        const sedeLabel =
+          sedeEfectiva === "todas" ? "Todas las sedes" : SEDE_LABELS[sedeEfectiva as Sede]
+        generateGymPDFReport(statsWithRange, filtro, range, sedeLabel)
+      }
     } finally {
       setPdfLoading(false)
     }
@@ -117,8 +155,35 @@ function EstadisticasContent() {
     <div className="space-y-6">
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Estadisticas Generales</h1>
-        <p className="text-muted-foreground">Resumen de usuarios y entradas registradas</p>
+        <p className="text-muted-foreground">
+          Resumen de usuarios y entradas registradas
+          {!puedeVerTodasSedes && user && (
+            <> · Sede <strong>{SEDE_LABELS[getStaffSede(user)]}</strong></>
+          )}
+        </p>
       </div>
+
+      {puedeVerTodasSedes && (
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button
+            variant={filtroSede === "todas" ? "default" : "outline"}
+            onClick={() => setFiltroSede("todas")}
+            className={filtroSede === "todas" ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+          >
+            Todas las sedes
+          </Button>
+          {SEDES_ACTIVAS.map((s) => (
+            <Button
+              key={s}
+              variant={filtroSede === s ? "default" : "outline"}
+              onClick={() => setFiltroSede(s)}
+              className={filtroSede === s ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+            >
+              {SEDE_LABELS[s]}
+            </Button>
+          ))}
+        </div>
+      )}
 
       {/* Filtros + botón PDF */}
       <div className="flex flex-wrap justify-center gap-2">
@@ -196,6 +261,17 @@ function EstadisticasContent() {
                 onChange={(e) => setFechaHasta(e.target.value)}
               />
             </div>
+            {puedeVerTodasSedes && filtroSede === "todas" && (
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pdfCompleto}
+                  onChange={(e) => setPdfCompleto(e.target.checked)}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Incluir resumen institucional + desglose por sede (Melendez y San Fernando)
+              </label>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPdfDialogOpen(false)}>

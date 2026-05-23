@@ -1,3 +1,7 @@
+import type { Sede } from "./sede"
+
+export type { Sede } from "./sede"
+
 export type UserRole = "superadmin" | "admin" | "monitor" | "encargado"
 export type Espacio = "gimnasio" | "guardarropas" | "piscina" | "tenis_mesa"
 
@@ -8,6 +12,8 @@ export interface SystemUser {
   passwordHash: string
   rol: UserRole
   espacio?: Espacio
+  /** Sede del staff; define a qué campus pertenecen sus registros. */
+  sede?: Sede
   creadoPor: string
   fechaCreacion: string
   activo: boolean
@@ -33,6 +39,7 @@ export interface UserProfile {
 export interface BiometricData {
   id: string
   usuarioId: string
+  sede?: Sede
   fecha: string
   altura: number // en cm
   peso: number // en kg
@@ -51,6 +58,7 @@ export interface EntryRecord {
   fecha: string
   hora: string
   instalacion: "gimnasio" | "piscina"
+  sede?: Sede
 }
 
 export interface FormData {
@@ -75,6 +83,7 @@ export interface LockerRecord {
   fechaIngreso: string
   horaIngreso: string
   estado: "ocupado" | "libre"
+  sede?: Sede
   motivoLiberacion?: string
   fechaLiberacion?: string
 }
@@ -84,6 +93,7 @@ export interface AttendanceRecord {
   monitorId: string
   monitorNombre: string
   espacio: string
+  sede?: Sede
   fecha: string
   horaEntrada: string
   horaSalida?: string
@@ -97,6 +107,7 @@ export interface TableTennisAccess {
   usuarioNombre: string
   usuarioDocumento: string
   mesa: number
+  sede?: Sede
   fecha: string
   hora: string
 }
@@ -113,6 +124,7 @@ export interface TableTennisLoan {
   horaInicio: string
   horaFin: string
   estado: "activo" | "devuelto" | "vencido"
+  sede?: Sede
   monitorId?: string
   monitorNombre?: string
   devueltoAt?: string
@@ -128,6 +140,7 @@ export interface TableTennisLoan {
 export interface TableTennisReport {
   id: string
   loanId: string
+  sede?: Sede
   mesa: number
   raqueta1: number
   raqueta2: number

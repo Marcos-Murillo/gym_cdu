@@ -22,6 +22,8 @@ export default function AsistenciaPage() {
   )
 }
 
+import { getStaffSede } from "@/lib/sede"
+
 function AsistenciaContent() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
@@ -51,7 +53,12 @@ function AsistenciaContent() {
   const handleEntrada = async () => {
     if (!user) return
     setSaving(true)
-    const r = await registerAttendanceEntry(user.id, user.nombre, user.espacio ?? "sin espacio")
+    const r = await registerAttendanceEntry(
+      user.id,
+      user.nombre,
+      user.espacio ?? "sin espacio",
+      getStaffSede(user),
+    )
     setRecord(r)
     setShowBanner(false)
     setSaving(false)

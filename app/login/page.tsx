@@ -86,7 +86,7 @@ export default function LoginPage() {
               <Dumbbell className="h-8 w-8 sm:h-7 sm:w-7 text-white" />
             </div>
           </div>
-          <CardTitle className="text-3xl sm:text-2xl">GymControl</CardTitle>
+          <CardTitle className="text-3xl sm:text-2xl">CDUControl</CardTitle>
           <CardDescription className="text-base sm:text-sm">Ingresa tus credenciales para continuar</CardDescription>
         </CardHeader>
         <CardContent className="px-6">

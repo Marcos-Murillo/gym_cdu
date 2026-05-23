@@ -46,6 +46,7 @@ import {
   loanUsuarioNombre,
   returnTableTennisPaddles,
 } from "@/lib/table-tennis-storage"
+import { getStaffSede, SEDE_LABELS } from "@/lib/sede"
 
 export default function TenisMesaPage() {
   return (
@@ -60,6 +61,7 @@ export default function TenisMesaPage() {
 
 function TenisMesaContent() {
   const { user } = useAuth()
+  const staffSede = getStaffSede(user)
   const [activos, setActivos] = useState<TableTennisLoan[]>([])
   const [reportes, setReportes] = useState<TableTennisReport[]>([])
   const [historial, setHistorial] = useState<TableTennisHistoryEntry[]>([])
@@ -80,15 +82,15 @@ function TenisMesaContent() {
 
   const loadData = useCallback(async () => {
     const [a, r, h] = await Promise.all([
-      getActiveTableTennisLoans(),
-      getTableTennisReports(),
-      getTableTennisHistory(),
+      getActiveTableTennisLoans(staffSede),
+      getTableTennisReports(staffSede),
+      getTableTennisHistory(staffSede),
     ])
     setActivos(a)
     setReportes(r)
     setHistorial(h)
     setLoadingData(false)
-  }, [])
+  }, [staffSede])
 
   useEffect(() => {
     loadData()
@@ -149,6 +151,7 @@ function TenisMesaContent() {
       await createTableTennisLoan({
         mesa: mesaSel,
         usuario,
+        sede: staffSede,
         monitorId: user?.id,
         monitorNombre: user?.nombre,
       })
@@ -189,7 +192,7 @@ function TenisMesaContent() {
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-foreground">Tenis de mesa</h1>
         <p className="text-muted-foreground">
-          8 mesas · 16 raquetas · préstamo 1 hora · 1 usuario por préstamo · máximo 1 préstamo por día
+          8 mesas · 16 raquetas · préstamo 1 hora · Sede {SEDE_LABELS[staffSede]}
         </p>
         <Link
           href="/tenis-mesa/acceso"

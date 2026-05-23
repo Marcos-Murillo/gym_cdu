@@ -40,6 +40,7 @@ function SSOHandler() {
           passwordHash: "",
           rol: data.rol,
           espacio: data.espacio ?? undefined,
+          sede: data.sede ?? undefined,
           creadoPor: "sso",
           fechaCreacion: new Date().toISOString(),
           activo: true,

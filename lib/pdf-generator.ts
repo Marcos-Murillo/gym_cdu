@@ -5,7 +5,8 @@ import type { AttendanceStats } from "./types"
 export function generateGymPDFReport(
   stats: AttendanceStats,
   filtro: "todas" | "gimnasio" | "piscina" | "tenis_mesa",
-  dateRange?: { desde?: string; hasta?: string }
+  dateRange?: { desde?: string; hasta?: string },
+  sedeLabel?: string,
 ) {
   const doc = new jsPDF()
   const pageWidth = doc.internal.pageSize.getWidth()
@@ -21,7 +22,6 @@ export function generateGymPDFReport(
           ? "Piscina"
           : "Tenis de mesa"
 
-  // ── Portada ──────────────────────────────────────────────────────────────
   doc.setFontSize(20)
   doc.setFont("helvetica", "bold")
   doc.text("INFORME DE ESTADÍSTICAS", pageWidth / 2, currentY, { align: "center" })
@@ -29,12 +29,16 @@ export function generateGymPDFReport(
 
   doc.setFontSize(14)
   doc.setFont("helvetica", "normal")
-  doc.text("CDU Gym — Universidad del Valle", pageWidth / 2, currentY, { align: "center" })
+  doc.text("CDUControl — Universidad del Valle", pageWidth / 2, currentY, { align: "center" })
   currentY += 7
 
   doc.setFontSize(10)
   doc.text(`Instalación: ${filtroLabel}`, pageWidth / 2, currentY, { align: "center" })
   currentY += 5
+  if (sedeLabel) {
+    doc.text(`Sede: ${sedeLabel}`, pageWidth / 2, currentY, { align: "center" })
+    currentY += 5
+  }
   if (dateRange?.desde || dateRange?.hasta) {
     const desde = dateRange.desde ? new Date(dateRange.desde + "T00:00:00").toLocaleDateString("es-CO") : "inicio"
     const hasta = dateRange.hasta ? new Date(dateRange.hasta + "T00:00:00").toLocaleDateString("es-CO") : "hoy"
@@ -44,7 +48,127 @@ export function generateGymPDFReport(
   }
   currentY += 15
 
-  // ── 1. Resumen general ───────────────────────────────────────────────────
+  appendStatsSections(doc, stats, filtro, pageHeight, currentY)
+
+  const totalPages = doc.internal.pages.length - 1
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "italic")
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: "center" })
+  }
+
+  const sedeSlug = sedeLabel ? sedeLabel.replace(/ /g, "_") : "General"
+  const fileName = `Estadisticas_CDUControl_${filtroLabel.replace(/ /g, "_")}_${sedeSlug}_${new Date().toISOString().split("T")[0]}.pdf`
+  doc.save(fileName)
+}
+
+export function generateGymPDFReportCompleto(
+  statsGlobal: AttendanceStats,
+  statsMelendez: AttendanceStats,
+  statsSanFernando: AttendanceStats,
+  filtro: "todas" | "gimnasio" | "piscina" | "tenis_mesa",
+  dateRange?: { desde?: string; hasta?: string },
+) {
+  const doc = new jsPDF()
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  let currentY = 20
+
+  const filtroLabel =
+    filtro === "todas"
+      ? "Todas las instalaciones"
+      : filtro === "gimnasio"
+        ? "Gimnasio"
+        : filtro === "piscina"
+          ? "Piscina"
+          : "Tenis de mesa"
+
+  doc.setFontSize(20)
+  doc.setFont("helvetica", "bold")
+  doc.text("INFORME INSTITUCIONAL CDUControl", pageWidth / 2, currentY, { align: "center" })
+  currentY += 10
+  doc.setFontSize(12)
+  doc.setFont("helvetica", "normal")
+  doc.text("Universidad del Valle — Todas las sedes", pageWidth / 2, currentY, { align: "center" })
+  currentY += 7
+  doc.setFontSize(10)
+  doc.text(`Instalación: ${filtroLabel}`, pageWidth / 2, currentY, { align: "center" })
+  currentY += 5
+  if (dateRange?.desde || dateRange?.hasta) {
+    const desde = dateRange.desde ? new Date(dateRange.desde + "T00:00:00").toLocaleDateString("es-CO") : "inicio"
+    const hasta = dateRange.hasta ? new Date(dateRange.hasta + "T00:00:00").toLocaleDateString("es-CO") : "hoy"
+    doc.text(`Período: ${desde} — ${hasta}`, pageWidth / 2, currentY, { align: "center" })
+  }
+  currentY += 12
+
+  doc.setFontSize(14)
+  doc.setFont("helvetica", "bold")
+  doc.text("RESUMEN CONSOLIDADO (Melendez + San Fernando)", 14, currentY)
+  currentY += 8
+  currentY = appendResumenTable(doc, statsGlobal, filtro, currentY) + 12
+
+  const sections: { title: string; stats: AttendanceStats }[] = [
+    { title: "SEDE MELENDEZ", stats: statsMelendez },
+    { title: "SEDE SAN FERNANDO", stats: statsSanFernando },
+  ]
+
+  for (const section of sections) {
+    doc.addPage()
+    currentY = 20
+    doc.setFontSize(16)
+    doc.setFont("helvetica", "bold")
+    doc.text(section.title, pageWidth / 2, currentY, { align: "center" })
+    currentY += 10
+    appendStatsSections(doc, section.stats, filtro, pageHeight, currentY)
+  }
+
+  const totalPages = doc.internal.pages.length - 1
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setFont("helvetica", "italic")
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: "center" })
+  }
+
+  doc.save(`Estadisticas_CDUControl_Completo_${filtroLabel.replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`)
+}
+
+function appendResumenTable(
+  doc: jsPDF,
+  stats: AttendanceStats,
+  filtro: "todas" | "gimnasio" | "piscina" | "tenis_mesa",
+  startY: number,
+): number {
+  const resumenBody: string[][] = [
+    ["Total usuarios con actividad", stats.totalUsuarios.toString()],
+    ["Total entradas / actividad", stats.totalEntradas.toString()],
+  ]
+  if (filtro === "todas") {
+    resumenBody.push(["Gimnasio", stats.totalGimnasio.toString()])
+    resumenBody.push(["Piscina", stats.totalPiscina.toString()])
+    resumenBody.push(["Tenis de mesa", (stats.totalTenisMesa ?? 0).toString()])
+  }
+  autoTable(doc, {
+    startY,
+    head: [["Indicador", "Valor"]],
+    body: resumenBody,
+    theme: "grid",
+    headStyles: { fillColor: [79, 70, 229], fontStyle: "bold" },
+    margin: { left: 14, right: 14 },
+    styles: { fontSize: 10 },
+  })
+  return (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+}
+
+function appendStatsSections(
+  doc: jsPDF,
+  stats: AttendanceStats,
+  filtro: "todas" | "gimnasio" | "piscina" | "tenis_mesa",
+  pageHeight: number,
+  startY: number,
+) {
+  let currentY = startY
   doc.setFontSize(14)
   doc.setFont("helvetica", "bold")
   doc.text("1. RESUMEN GENERAL", 14, currentY)
@@ -260,21 +384,4 @@ export function generateGymPDFReport(
       styles: { fontSize: 9 },
     })
   }
-
-  // ── Pie de página ────────────────────────────────────────────────────────
-  const totalPages = doc.internal.pages.length - 1
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i)
-    doc.setFontSize(8)
-    doc.setFont("helvetica", "italic")
-    doc.text(
-      `Página ${i} de ${totalPages}`,
-      pageWidth / 2,
-      pageHeight - 10,
-      { align: "center" }
-    )
-  }
-
-  const fileName = `Estadisticas_GymCDU_${filtroLabel.replace(/ /g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`
-  doc.save(fileName)
 }

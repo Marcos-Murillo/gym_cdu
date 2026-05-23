@@ -9,8 +9,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'GymControl - Sistema de Gestion de Gimnasio',
-  description: 'Sistema de registro, control de acceso y estadisticas para gimnasio',
+  title: 'CDUControl - Sistema de gestión CDU',
+  description: 'Registro, control de acceso y estadísticas para espacios del CDU',
   generator: 'v0.app',
   icons: {
     icon: [

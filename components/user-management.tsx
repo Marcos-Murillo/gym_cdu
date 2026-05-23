@@ -13,7 +13,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { UserPlus, Users, ToggleLeft, ToggleRight } from "lucide-react"
 import { createSystemUser, getSystemUsers, toggleSystemUser, getRolesForCreator } from "@/lib/auth"
 import { useAuth } from "@/lib/auth-context"
-import type { SystemUser, UserRole, Espacio } from "@/lib/types"
+import type { SystemUser, UserRole, Espacio, Sede } from "@/lib/types"
+import {
+  SEDES_ACTIVAS,
+  SEDE_LABELS,
+  canViewAllSedes,
+  getStaffSede,
+  getSedeForNewStaff,
+  resolveSede,
+} from "@/lib/sede"
 
 const ROLE_LABELS: Record<UserRole, string> = {
   superadmin: "Super Admin",
@@ -48,19 +56,25 @@ export function UserManagement({ title }: UserManagementProps) {
   const [password, setPassword] = useState("")
   const [rol, setRol] = useState<UserRole | "">("")
   const [espacio, setEspacio] = useState<Espacio | "">("")
+  const [sede, setSede] = useState<Sede | "">("")
 
   const availableRoles = currentUser ? getRolesForCreator(currentUser.rol) : []
   const needsEspacio = ROLES_CON_ESPACIO.includes(rol as UserRole)
+  const isSuperAdmin = currentUser?.rol === "superadmin"
+  const defaultSede = currentUser ? getStaffSede(currentUser) : undefined
 
   const loadUsers = async () => {
     try {
       const all = await getSystemUsers()
-      // superadmin ve todos, admin no ve superadmins
+      let filtered = all
       if (currentUser?.rol === "admin") {
-        setUsers(all.filter(u => u.rol !== "superadmin"))
-      } else {
-        setUsers(all)
+        filtered = all.filter((u) => u.rol !== "superadmin")
       }
+      if (currentUser && !canViewAllSedes(currentUser.rol)) {
+        const campus = getStaffSede(currentUser)
+        filtered = filtered.filter((u) => resolveSede(u.sede) === campus)
+      }
+      setUsers(filtered)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(`Error al cargar usuarios: ${msg}`)
@@ -77,6 +91,7 @@ export function UserManagement({ title }: UserManagementProps) {
     setPassword("")
     setRol("")
     setEspacio("")
+    setSede("")
     setError("")
   }
 
@@ -85,6 +100,10 @@ export function UserManagement({ title }: UserManagementProps) {
     if (!currentUser || !rol) return
     if (needsEspacio && !espacio) {
       setError("Debes asignar un espacio para este rol.")
+      return
+    }
+    if (isSuperAdmin && rol !== "superadmin" && !sede) {
+      setError("Debes asignar una sede.")
       return
     }
     setLoading(true)
@@ -96,7 +115,9 @@ export function UserManagement({ title }: UserManagementProps) {
         password,
         rol: rol as UserRole,
         espacio: needsEspacio ? (espacio as Espacio) : undefined,
+        sede: isSuperAdmin ? (sede as Sede) : getSedeForNewStaff(currentUser),
         creadoPor: currentUser.id,
+        creator: currentUser,
       })
       setSuccess("Usuario creado exitosamente.")
       setOpen(false)
@@ -181,6 +202,26 @@ export function UserManagement({ title }: UserManagementProps) {
                   </Select>
                 </div>
               )}
+              {isSuperAdmin && rol && rol !== "superadmin" && (
+                <div className="space-y-2">
+                  <Label>Sede</Label>
+                  <Select value={sede} onValueChange={v => setSede(v as Sede)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar sede" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SEDES_ACTIVAS.map(s => (
+                        <SelectItem key={s} value={s}>{SEDE_LABELS[s]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {!isSuperAdmin && defaultSede && (
+                <p className="text-sm text-muted-foreground">
+                  Sede asignada: <strong>{SEDE_LABELS[defaultSede]}</strong>
+                </p>
+              )}
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={loading}>
                 {loading ? "Creando..." : "Crear Usuario"}
@@ -207,6 +248,7 @@ export function UserManagement({ title }: UserManagementProps) {
                 <TableHead>Nombre</TableHead>
                 <TableHead>Cédula</TableHead>
                 <TableHead>Rol</TableHead>
+                <TableHead>Sede</TableHead>
                 <TableHead>Espacio</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead></TableHead>
@@ -220,6 +262,7 @@ export function UserManagement({ title }: UserManagementProps) {
                   <TableCell>
                     <Badge variant="outline">{ROLE_LABELS[u.rol]}</Badge>
                   </TableCell>
+                  <TableCell>{u.sede ? SEDE_LABELS[resolveSede(u.sede)] : "—"}</TableCell>
                   <TableCell>{u.espacio ? ESPACIO_LABELS[u.espacio] : "—"}</TableCell>
                   <TableCell>
                     <Badge className={u.activo ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}>
@@ -237,7 +280,7 @@ export function UserManagement({ title }: UserManagementProps) {
               ))}
               {users.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     No hay usuarios creados aún.
                   </TableCell>
                 </TableRow>
