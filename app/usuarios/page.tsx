@@ -25,9 +25,11 @@ import {
   X,
   MoreVertical,
   Eye,
-  Trash2
+  Trash2,
+  FileSpreadsheet
 } from "lucide-react"
 import { filterUsers, getUsers, getUserServiceUsageCounts } from "@/lib/storage"
+import { exportUsersUsageExcel } from "@/lib/excel-generator"
 import type { UserServiceUsage } from "@/lib/storage"
 import { ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import type { UserProfile } from "@/lib/types"
@@ -180,6 +182,11 @@ function UsuariosContent() {
   const usageFor = (usuarioId: string): UserServiceUsage =>
     usageByUser[usuarioId] ?? { gimnasio: 0, piscina: 0, guardarropas: 0, tenis_mesa: 0 }
 
+  const handleExportExcel = () => {
+    const suffix = hasActiveFilters ? "filtrado" : "completo"
+    exportUsersUsageExcel(filteredUsuarios, usageByUser, suffix)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -327,15 +334,23 @@ function UsuariosContent() {
       </Card>
 
       {/* Resultados */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
           Mostrando {filteredUsuarios.length} de {usuarios.length} usuarios
         </p>
-        {hasActiveFilters && (
-          <Badge variant="secondary">
-            Filtros activos
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <Badge variant="secondary">
+              Filtros activos
+            </Badge>
+          )}
+          {isSuperAdmin && filteredUsuarios.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleExportExcel}>
+              <FileSpreadsheet className="h-4 w-4 mr-2" />
+              Exportar Excel
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Tabla de usuarios */}
