@@ -25,6 +25,7 @@ import {
 } from "./table-tennis-utils"
 import { getUsers } from "./storage"
 import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
+import { isSanFernandoSede } from "./sede-rules"
 
 const LOANS_COLLECTION = "tableTennisLoans"
 const REPORTS_COLLECTION = "tableTennisReports"
@@ -128,9 +129,17 @@ export async function createTableTennisAccess(
   mesa: number,
   sede?: Sede,
 ): Promise<TableTennisAccess> {
-  if (mesa < 1 || mesa > 8) throw new Error("Mesa inválida (1 a 8)")
-  const { fecha, hora } = nowDateTime()
   const campus = resolveSede(sede)
+  if (isSanFernandoSede(campus)) {
+    const { getSfTables } = await import("./sf-table-tennis-inventory")
+    const tables = await getSfTables()
+    if (!tables.some((t) => t.numero === mesa)) {
+      throw new Error("Mesa no registrada en San Fernando")
+    }
+  } else if (mesa < 1 || mesa > 8) {
+    throw new Error("Mesa inválida (1 a 8)")
+  }
+  const { fecha, hora } = nowDateTime()
   const record: Omit<TableTennisAccess, "id"> = {
     usuarioId: usuario.id,
     usuarioNombre: usuario.nombres,
@@ -153,6 +162,9 @@ export async function createTableTennisLoan(params: {
 }): Promise<TableTennisLoan> {
   const { mesa, usuario, monitorId, monitorNombre, sede } = params
   const campus = resolveSede(sede)
+  if (isSanFernandoSede(campus)) {
+    throw new Error("En San Fernando use el préstamo con inventario dinámico")
+  }
   if (mesa < 1 || mesa > 8) throw new Error("Mesa inválida")
 
   if (await userHasLoanToday(usuario.id, campus)) {
@@ -178,6 +190,7 @@ export async function createTableTennisLoan(params: {
     horaInicio: hora,
     horaFin,
     estado: "activo",
+    inventoryMode: "fixed",
     monitorId,
     monitorNombre,
   }

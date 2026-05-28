@@ -112,6 +112,26 @@ export interface TableTennisAccess {
   hora: string
 }
 
+export type TableTennisInventoryMode = "fixed" | "dynamic"
+
+export type SfPaddleStatus = "disponible" | "prestada" | "danada"
+
+export interface SfTableTennisTable {
+  id: string
+  sede: Sede
+  numero: number
+  activo: boolean
+}
+
+export interface SfTableTennisPaddle {
+  id: string
+  sede: Sede
+  tableId: string
+  mesaNumero: number
+  serial: string
+  estado: SfPaddleStatus
+}
+
 export interface TableTennisLoan {
   id: string
   mesa: number
@@ -128,6 +148,13 @@ export interface TableTennisLoan {
   monitorId?: string
   monitorNombre?: string
   devueltoAt?: string
+  /** Meléndez: fijo. San Fernando: inventario dinámico. */
+  inventoryMode?: TableTennisInventoryMode
+  /** SF: IDs y series de raquetas prestadas (1–4). */
+  paddleIds?: string[]
+  paddleSerials?: string[]
+  /** SF: raquetas ya devueltas en préstamo parcial. */
+  returnedPaddleIds?: string[]
   /** Campos legacy (préstamos con dos usuarios). */
   usuario1Id?: string
   usuario2Id?: string
@@ -152,6 +179,10 @@ export interface TableTennisReport {
   fechaReporte: string
   horaReporte: string
   generadoPor?: string
+  /** SF: daño por raqueta (serie). */
+  paddleId?: string
+  paddleSerial?: string
+  damageDescription?: string
   usuario1Nombre?: string
   usuario2Nombre?: string
   usuario1Documento?: string

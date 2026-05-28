@@ -14,6 +14,7 @@ import {
 import { db } from "./firebase"
 import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord } from "./types"
 import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
+import { guardarropasAppliesToSede } from "./sede-rules"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -426,8 +427,18 @@ export type UserServiceUsage = {
   tenis_mesa: number
 }
 
+function inDateRange(fecha: string, fechaDesde?: string, fechaHasta?: string): boolean {
+  if (fechaDesde && fecha < fechaDesde) return false
+  if (fechaHasta && fecha > fechaHasta) return false
+  return true
+}
+
 /** Conteos por usuario: entradas gimnasio/piscina, casilleros y préstamos tenis de mesa. */
-export async function getUserServiceUsageCounts(sedeFiltro?: SedeFiltro): Promise<Record<string, UserServiceUsage>> {
+export async function getUserServiceUsageCounts(
+  sedeFiltro?: SedeFiltro,
+  fechaDesde?: string,
+  fechaHasta?: string,
+): Promise<Record<string, UserServiceUsage>> {
   const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
   const [entries, lockers, tenisLoansRaw, tenisAccessRaw] = await Promise.all([
     getEntries(),
@@ -435,10 +446,18 @@ export async function getUserServiceUsageCounts(sedeFiltro?: SedeFiltro): Promis
     getAllTableTennisLoans(),
     getAllTableTennisAccess(),
   ])
-  const entriesF = filterBySede(entries, sedeFiltro)
-  const lockersF = filterBySede(lockers, sedeFiltro)
-  const tenisLoans = filterBySede(tenisLoansRaw, sedeFiltro)
-  const tenisAccess = filterBySede(tenisAccessRaw, sedeFiltro)
+  const entriesF = filterBySede(entries, sedeFiltro).filter((e) =>
+    inDateRange(e.fecha, fechaDesde, fechaHasta),
+  )
+  const lockersF = filterBySede(lockers, sedeFiltro).filter((l) =>
+    inDateRange(l.fechaIngreso, fechaDesde, fechaHasta),
+  )
+  const tenisLoans = filterBySede(tenisLoansRaw, sedeFiltro).filter((l) =>
+    inDateRange(l.fecha, fechaDesde, fechaHasta),
+  )
+  const tenisAccess = filterBySede(tenisAccessRaw, sedeFiltro).filter((a) =>
+    inDateRange(a.fecha, fechaDesde, fechaHasta),
+  )
   const counts: Record<string, UserServiceUsage> = {}
 
   const bump = (userId: string, key: keyof UserServiceUsage) => {
@@ -455,8 +474,10 @@ export async function getUserServiceUsageCounts(sedeFiltro?: SedeFiltro): Promis
     else bump(e.usuarioId, "gimnasio")
   }
 
-  for (const l of lockersF) {
-    bump(l.usuarioId, "guardarropas")
+  if (guardarropasAppliesToSede(sedeFiltro)) {
+    for (const l of lockersF) {
+      bump(l.usuarioId, "guardarropas")
+    }
   }
 
   for (const loan of tenisLoans) {

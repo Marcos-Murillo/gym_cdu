@@ -29,7 +29,7 @@ import {
   FileSpreadsheet
 } from "lucide-react"
 import { filterUsers, getUsers, getUserServiceUsageCounts } from "@/lib/storage"
-import { exportUsersUsageExcel } from "@/lib/excel-generator"
+import { exportUsersUsageExcel, GYM_EXCEL_OPTIONAL_COLUMNS } from "@/lib/excel-generator"
 import type { UserServiceUsage } from "@/lib/storage"
 import { ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import type { UserProfile } from "@/lib/types"
@@ -184,7 +184,16 @@ function UsuariosContent() {
 
   const handleExportExcel = () => {
     const suffix = hasActiveFilters ? "filtrado" : "completo"
-    exportUsersUsageExcel(filteredUsuarios, usageByUser, suffix)
+    exportUsersUsageExcel(
+      filteredUsuarios,
+      usageByUser,
+      GYM_EXCEL_OPTIONAL_COLUMNS.map((col) => col.key),
+      {
+        fileSuffix: suffix,
+        onlyWithUsage: false,
+        includeGuardarropas: true,
+      },
+    )
   }
 
   if (loading) {

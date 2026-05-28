@@ -10,7 +10,10 @@ export function ConditionalNavigation() {
     pathname === "/" ||
     pathname.startsWith("/ticket") ||
     pathname === "/login" ||
-    pathname === "/tenis-mesa/acceso"
+    pathname === "/tenis-mesa/acceso" ||
+    pathname === "/gimnasio/acceso" ||
+    pathname === "/piscina/acceso" ||
+    pathname.startsWith("/tenis-mesa/inventario")
   ) {
     return null
   }

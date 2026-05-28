@@ -13,6 +13,8 @@ import {
   ClipboardList, CalendarCheck, LogIn, CircleDot,
 } from "lucide-react"
 import type { UserRole, Espacio } from "@/lib/types"
+import { getStaffSede } from "@/lib/sede"
+import { guardarropasAppliesToSede, usesFixedTableTennisInventory } from "@/lib/sede-rules"
 
 interface NavItem {
   href: string
@@ -36,6 +38,7 @@ const adminItems: NavItem[] = [
   { href: "/tenis-mesa",               label: "Tenis de mesa",         icon: CircleDot,    roles: ["superadmin", "admin"], espacio: "tenis_mesa" },
   { href: "/estadisticas",           label: "Estadísticas",          icon: BarChart3,    roles: ["superadmin", "admin"] },
   { href: "/guardarropas/historial", label: "Historial casilleros",  icon: ClipboardList,roles: ["superadmin", "admin"] },
+  { href: "/tenis-mesa/inventario", label: "Inventario tenis SF", icon: CircleDot, roles: ["superadmin", "admin", "encargado"] },
   { href: "/asistencia/seguimiento", label: "Seguimiento asistencia",icon: CalendarCheck,roles: ["superadmin", "admin"] },
   { href: "/usuarios",               label: "Usuarios",              icon: Users,        roles: ["superadmin", "admin"] },
   { href: "/admin",                  label: "Panel Admin",           icon: UserCog,      roles: ["superadmin", "admin"] },
@@ -62,8 +65,21 @@ export function Navigation() {
 
   const userEspacio = user.espacio ?? undefined
 
-  const visibleEspacios = espaciosItems.filter(i => canSeeItem(i, user.rol, userEspacio))
-  const visibleAdmin = adminItems.filter(i => canSeeItem(i, user.rol, userEspacio))
+  const staffSede = getStaffSede(user)
+  const showGuardarropas = guardarropasAppliesToSede(staffSede)
+
+  const fixedInventory = usesFixedTableTennisInventory(staffSede)
+
+  const visibleEspacios = espaciosItems.filter((i) => {
+    if (i.href === "/guardarropas" && !showGuardarropas) return false
+    if ((i.href === "/gimnasio" || i.href === "/piscina") && !fixedInventory) return false
+    return canSeeItem(i, user.rol, userEspacio)
+  })
+  const visibleAdmin = adminItems.filter((i) => {
+    if (i.href === "/guardarropas/historial" && !showGuardarropas) return false
+    if (i.href === "/tenis-mesa/inventario" && fixedInventory) return false
+    return canSeeItem(i, user.rol, userEspacio)
+  })
 
   const handleLogoutClick = async () => {
     if (user.rol === "monitor") {

@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,8 @@ import { CheckCircle2, CircleDot, MapPin, Table2, UserPlus } from "lucide-react"
 import { TOTAL_MESAS } from "@/lib/table-tennis-utils"
 import { createTableTennisAccess } from "@/lib/table-tennis-storage"
 import { sedeFromQueryParam, SEDE_LABELS, SEDES_ACTIVAS, type Sede } from "@/lib/sede"
+import { isSanFernandoSede } from "@/lib/sede-rules"
+import { getSfTables } from "@/lib/sf-table-tennis-inventory"
 import type { UserProfile } from "@/lib/types"
 
 export default function TenisMesaAccesoPage() {
@@ -41,6 +43,23 @@ function TenisMesaAccesoContent() {
   const [buscando, setBuscando] = useState(false)
   const [registrando, setRegistrando] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [mesasSf, setMesasSf] = useState<number[]>([])
+
+  useEffect(() => {
+    if (sede && isSanFernandoSede(sede)) {
+      getSfTables()
+        .then((tables) => setMesasSf(tables.map((t) => t.numero)))
+        .catch(() => setMesasSf([]))
+    } else {
+      setMesasSf([])
+    }
+    setMesa("")
+  }, [sede])
+
+  const mesasDisponibles =
+    sede && isSanFernandoSede(sede)
+      ? mesasSf
+      : Array.from({ length: TOTAL_MESAS }, (_, i) => i + 1)
 
   const handleBuscar = async () => {
     if (!busqueda.trim()) return
@@ -183,14 +202,28 @@ function TenisMesaAccesoContent() {
               disabled={!usuario}
             >
               <SelectTrigger id="acceso-mesa" className="h-11 text-base">
-                <SelectValue placeholder="Selecciona una mesa (1 a 8)" />
+                <SelectValue
+                  placeholder={
+                    sede && isSanFernandoSede(sede)
+                      ? "Selecciona una mesa registrada"
+                      : "Selecciona una mesa (1 a 8)"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
-                {Array.from({ length: TOTAL_MESAS }, (_, i) => i + 1).map((n) => (
-                  <SelectItem key={n} value={String(n)}>
-                    Mesa {n}
+                {mesasDisponibles.length === 0 ? (
+                  <SelectItem value="_none" disabled>
+                    {sede && isSanFernandoSede(sede)
+                      ? "No hay mesas en San Fernando"
+                      : "Sin mesas"}
                   </SelectItem>
-                ))}
+                ) : (
+                  mesasDisponibles.map((n) => (
+                    <SelectItem key={n} value={String(n)}>
+                      Mesa {n}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>

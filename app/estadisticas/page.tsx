@@ -11,10 +11,17 @@ import { Label } from "@/components/ui/label"
 import {
   Users, DoorOpen, UserCheck, Building2, GraduationCap,
   Clock, Calendar, Dumbbell, Waves, FileDown, Loader2, CircleDot, Table2,
+  MoreVertical, SlidersHorizontal,
 } from "lucide-react"
-import { generateStats } from "@/lib/storage"
+import { generateStats, getUsers, getUserServiceUsageCounts } from "@/lib/storage"
 import { generateTableTennisStats } from "@/lib/table-tennis-storage"
 import { generateGymPDFReport, generateGymPDFReportCompleto } from "@/lib/pdf-generator"
+import {
+  exportUsersUsageExcel,
+  GYM_EXCEL_OPTIONAL_COLUMNS,
+  usageKeyFromFiltro,
+} from "@/lib/excel-generator"
+import { ExcelColumnSelector } from "@/components/excel-column-selector"
 import type { AttendanceStats } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import {
@@ -25,6 +32,22 @@ import {
   type Sede,
   type SedeFiltro,
 } from "@/lib/sede"
+import { guardarropasAppliesToSede } from "@/lib/sede-rules"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend,
@@ -53,9 +76,18 @@ function EstadisticasContent() {
   const [pdfCompleto, setPdfCompleto] = useState(false)
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
+  const [excelDialogOpen, setExcelDialogOpen] = useState(false)
+  const [excelFechaDesde, setExcelFechaDesde] = useState("")
+  const [excelFechaHasta, setExcelFechaHasta] = useState("")
+  const [excelLoading, setExcelLoading] = useState(false)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [advFacultad, setAdvFacultad] = useState("TODOS")
+  const [advPrograma, setAdvPrograma] = useState("TODOS")
 
   const puedeVerTodasSedes = user ? canViewAllSedes(user.rol) : false
   const sedeEfectiva: SedeFiltro = puedeVerTodasSedes ? filtroSede : getStaffSede(user)
+  const includeGuardarropas = guardarropasAppliesToSede(sedeEfectiva)
+  const hasAdvancedFilters = advFacultad !== "TODOS" || advPrograma !== "TODOS"
 
   useEffect(() => {
     const loadStats = async () => {
@@ -128,6 +160,53 @@ function EstadisticasContent() {
     }
   }
 
+  const handleOpenExcelDialog = () => {
+    setExcelFechaDesde("")
+    setExcelFechaHasta("")
+    setExcelDialogOpen(true)
+  }
+
+  const handleDownloadExcel = async (selectedColumns: string[]) => {
+    if (!user) return
+    setExcelLoading(true)
+    try {
+      const [users, usageByUser] = await Promise.all([
+        getUsers(),
+        getUserServiceUsageCounts(
+          sedeEfectiva,
+          excelFechaDesde || undefined,
+          excelFechaHasta || undefined,
+        ),
+      ])
+
+      const filtroLabel =
+        filtro === "todas"
+          ? "Todas"
+          : filtro === "gimnasio"
+            ? "Gimnasio"
+            : filtro === "piscina"
+              ? "Piscina"
+              : "Tenis_de_mesa"
+      const sedeLabel =
+        sedeEfectiva === "todas" ? "Todas_sedes" : SEDE_LABELS[sedeEfectiva as Sede].replace(/ /g, "_")
+      const rangeSuffix =
+        excelFechaDesde || excelFechaHasta
+          ? `${excelFechaDesde || "inicio"}_${excelFechaHasta || "hoy"}`
+          : "completo"
+
+      exportUsersUsageExcel(users, usageByUser, selectedColumns, {
+        fileSuffix: `${filtroLabel}_${sedeLabel}_${rangeSuffix}`,
+        minUsageKey: usageKeyFromFiltro(filtro),
+        includeGuardarropas,
+        facultad: advFacultad !== "TODOS" ? advFacultad : undefined,
+        programa: advPrograma !== "TODOS" ? advPrograma : undefined,
+      })
+      setExcelDialogOpen(false)
+    } finally {
+      setExcelLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -150,6 +229,9 @@ function EstadisticasContent() {
     .map(([name, value]) => ({ name: name.replace("FACULTAD DE ", ""), value }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 8)
+
+  const facultadOptions = Object.keys(stats.porFacultad).filter(Boolean).sort()
+  const programaOptions = Object.keys(stats.porPrograma).filter(Boolean).sort()
 
   return (
     <div className="space-y-6">
@@ -185,8 +267,73 @@ function EstadisticasContent() {
         </div>
       )}
 
-      {/* Filtros + botón PDF */}
-      <div className="flex flex-wrap justify-center gap-2">
+      {/* Filtros + exportación */}
+      <div className="flex flex-wrap justify-center items-center gap-2">
+        <DropdownMenu open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon" title="Filtros avanzados">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-72 p-3">
+            <DropdownMenuLabel className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filtros avanzados
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="space-y-3 px-1 py-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Facultad</Label>
+                <Select value={advFacultad} onValueChange={setAdvFacultad}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todas</SelectItem>
+                    {facultadOptions.map((f) => (
+                      <SelectItem key={f} value={f}>
+                        {f.replace("FACULTAD DE ", "")}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Programa</Label>
+                <Select value={advPrograma} onValueChange={setAdvPrograma}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TODOS">Todos</SelectItem>
+                    {programaOptions.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setAdvFacultad("TODOS")
+                  setAdvPrograma("TODOS")
+                }}
+              >
+                Limpiar filtros
+              </Button>
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {hasAdvancedFilters && (
+          <Badge variant="secondary" className="text-xs">
+            Filtros: {advFacultad !== "TODOS" ? "facultad" : ""}{" "}
+            {advPrograma !== "TODOS" ? "programa" : ""}
+          </Badge>
+        )}
         <Button
           variant={filtro === "todas" ? "default" : "outline"}
           onClick={() => setFiltro("todas")}
@@ -231,7 +378,66 @@ function EstadisticasContent() {
           )}
           Generar PDF
         </Button>
+
+        <Button
+          variant="outline"
+          onClick={handleOpenExcelDialog}
+          disabled={excelLoading}
+          className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+        >
+          {excelLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Table2 className="h-4 w-4 mr-2" />
+          )}
+          Descargar Excel
+        </Button>
       </div>
+
+      {/* Diálogo Excel */}
+      <Dialog open={excelDialogOpen} onOpenChange={setExcelDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Descargar Excel de usuarios</DialogTitle>
+            <DialogDescription>
+              Selecciona el rango de fechas y las columnas adicionales. Los nombres se exportan en
+              mayúscula e incluyen los usos por espacio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="excelFechaDesde">Desde</Label>
+                <Input
+                  id="excelFechaDesde"
+                  type="date"
+                  value={excelFechaDesde}
+                  onChange={(e) => setExcelFechaDesde(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="excelFechaHasta">Hasta</Label>
+                <Input
+                  id="excelFechaHasta"
+                  type="date"
+                  value={excelFechaHasta}
+                  onChange={(e) => setExcelFechaHasta(e.target.value)}
+                />
+              </div>
+            </div>
+            <ExcelColumnSelector
+              availableColumns={GYM_EXCEL_OPTIONAL_COLUMNS}
+              onDownload={handleDownloadExcel}
+              disabled={excelLoading}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExcelDialogOpen(false)}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo rango de fechas */}
       <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>

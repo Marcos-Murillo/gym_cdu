@@ -47,19 +47,27 @@ import {
   returnTableTennisPaddles,
 } from "@/lib/table-tennis-storage"
 import { getStaffSede, SEDE_LABELS } from "@/lib/sede"
+import { usesFixedTableTennisInventory } from "@/lib/sede-rules"
+import { TenisMesaSfOperations } from "@/components/tenis-mesa-sf-operations"
 
 export default function TenisMesaPage() {
   return (
-    <RouteGuard
-      allowedRoles={["superadmin", "admin", "monitor"]}
-      requiredEspacioOrAdmin="tenis_mesa"
-    >
-      <TenisMesaContent />
+    <RouteGuard allowedRoles={["superadmin", "admin", "monitor", "encargado"]}>
+      <TenisMesaRouter />
     </RouteGuard>
   )
 }
 
-function TenisMesaContent() {
+function TenisMesaRouter() {
+  const { user } = useAuth()
+  const staffSede = getStaffSede(user)
+  if (!usesFixedTableTennisInventory(staffSede)) {
+    return <TenisMesaSfOperations user={user} />
+  }
+  return <TenisMesaMelendezContent />
+}
+
+function TenisMesaMelendezContent() {
   const { user } = useAuth()
   const staffSede = getStaffSede(user)
   const [activos, setActivos] = useState<TableTennisLoan[]>([])
