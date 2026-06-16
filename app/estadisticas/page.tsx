@@ -20,6 +20,7 @@ import {
   exportUsersUsageExcel,
   GYM_EXCEL_OPTIONAL_COLUMNS,
   usageKeyFromFiltro,
+  buildUserSedeLabels,
 } from "@/lib/excel-generator"
 import { ExcelColumnSelector } from "@/components/excel-column-selector"
 import type { AttendanceStats } from "@/lib/types"
@@ -179,6 +180,10 @@ function EstadisticasContent() {
         ),
       ])
 
+      const sedeByUser = selectedColumns.includes("sede")
+        ? await buildUserSedeLabels(excelFechaDesde || undefined, excelFechaHasta || undefined)
+        : undefined
+
       const filtroLabel =
         filtro === "todas"
           ? "Todas"
@@ -200,6 +205,7 @@ function EstadisticasContent() {
         includeGuardarropas,
         facultad: advFacultad !== "TODOS" ? advFacultad : undefined,
         programa: advPrograma !== "TODOS" ? advPrograma : undefined,
+        sedeByUser,
       })
       setExcelDialogOpen(false)
     } finally {

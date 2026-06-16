@@ -1,6 +1,68 @@
 import * as XLSX from "xlsx"
 import type { UserProfile } from "./types"
 import type { UserServiceUsage } from "./storage"
+import { resolveSede, SEDE_LABELS, type Sede } from "./sede"
+
+function inDateRange(fecha: string, fechaDesde?: string, fechaHasta?: string): boolean {
+  if (fechaDesde && fecha < fechaDesde) return false
+  if (fechaHasta && fecha > fechaHasta) return false
+  return true
+}
+
+/** Sede(s) donde el usuario registró actividad en el rango de fechas. */
+export async function buildUserSedeLabels(
+  fechaDesde?: string,
+  fechaHasta?: string,
+): Promise<Record<string, string>> {
+  const { getEntries, getAllLockers } = await import("./storage")
+  const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
+
+  const userSedes = new Map<string, Set<Sede>>()
+
+  const addSede = (userId: string | undefined, sede?: string | null) => {
+    if (!userId) return
+    const resolved = resolveSede(sede)
+    const set = userSedes.get(userId) ?? new Set<Sede>()
+    set.add(resolved)
+    userSedes.set(userId, set)
+  }
+
+  const [entries, lockers, tenisLoans, tenisAccess] = await Promise.all([
+    getEntries(),
+    getAllLockers(),
+    getAllTableTennisLoans(),
+    getAllTableTennisAccess(),
+  ])
+
+  for (const entry of entries) {
+    if (!inDateRange(entry.fecha, fechaDesde, fechaHasta)) continue
+    addSede(entry.usuarioId, entry.sede)
+  }
+
+  for (const locker of lockers) {
+    if (!inDateRange(locker.fechaIngreso, fechaDesde, fechaHasta)) continue
+    addSede(locker.usuarioId, locker.sede)
+  }
+
+  for (const loan of tenisLoans) {
+    if (!inDateRange(loan.fecha, fechaDesde, fechaHasta)) continue
+    addSede(loan.usuarioId ?? loan.usuario1Id, loan.sede)
+    addSede(loan.usuario2Id, loan.sede)
+  }
+
+  for (const access of tenisAccess) {
+    if (!inDateRange(access.fecha, fechaDesde, fechaHasta)) continue
+    addSede(access.usuarioId, access.sede)
+  }
+
+  const result: Record<string, string> = {}
+  for (const [userId, sedes] of userSedes) {
+    result[userId] = Array.from(sedes)
+      .map((s) => SEDE_LABELS[s])
+      .join(" / ")
+  }
+  return result
+}
 
 function upperName(name: string): string {
   return (name || "").trim().toUpperCase()
@@ -11,6 +73,7 @@ function buildUserUsageRow(
   usage: UserServiceUsage,
   selectedColumns: string[],
   includeGuardarropas: boolean,
+  sedeByUser?: Record<string, string>,
 ) {
   const total =
     usage.gimnasio +
@@ -62,6 +125,9 @@ function buildUserUsageRow(
       case "edad":
         row["Edad"] = user.edad ?? ""
         break
+      case "sede":
+        row["Sede"] = sedeByUser?.[user.id] ?? ""
+        break
     }
   }
 
@@ -84,6 +150,7 @@ function orderColumns(
     correo: "Correo",
     telefono: "Teléfono",
     edad: "Edad",
+    sede: "Sede",
   }
 
   const columnOrder = [
@@ -134,6 +201,7 @@ export function exportUsersUsageExcel(
     includeGuardarropas?: boolean
     facultad?: string
     programa?: string
+    sedeByUser?: Record<string, string>
   },
 ) {
   const includeGuardarropas = opts?.includeGuardarropas !== false
@@ -150,7 +218,7 @@ export function exportUsersUsageExcel(
         guardarropas: 0,
         tenis_mesa: 0,
       }
-      return buildUserUsageRow(user, usage, selectedColumns, includeGuardarropas)
+      return buildUserUsageRow(user, usage, selectedColumns, includeGuardarropas, opts?.sedeByUser)
     })
     .filter((row) => {
       if (opts?.minUsageKey) {
@@ -192,6 +260,7 @@ export type GymExcelOptionalColumn =
   | "correo"
   | "telefono"
   | "edad"
+  | "sede"
 
 export const GYM_EXCEL_OPTIONAL_COLUMNS: { key: GymExcelOptionalColumn; label: string }[] = [
   { key: "codigoEstudiantil", label: "Código" },
@@ -204,6 +273,7 @@ export const GYM_EXCEL_OPTIONAL_COLUMNS: { key: GymExcelOptionalColumn; label: s
   { key: "correo", label: "Correo" },
   { key: "telefono", label: "Teléfono" },
   { key: "edad", label: "Edad" },
+  { key: "sede", label: "Sede" },
 ]
 
 export function usageKeyFromFiltro(

@@ -29,7 +29,7 @@ import {
   FileSpreadsheet
 } from "lucide-react"
 import { filterUsers, getUsers, getUserServiceUsageCounts } from "@/lib/storage"
-import { exportUsersUsageExcel, GYM_EXCEL_OPTIONAL_COLUMNS } from "@/lib/excel-generator"
+import { exportUsersUsageExcel, GYM_EXCEL_OPTIONAL_COLUMNS, buildUserSedeLabels } from "@/lib/excel-generator"
 import type { UserServiceUsage } from "@/lib/storage"
 import { ESTAMENTOS, FACULTADES, PROGRAMAS_POR_FACULTAD } from "@/lib/data"
 import type { UserProfile } from "@/lib/types"
@@ -182,16 +182,19 @@ function UsuariosContent() {
   const usageFor = (usuarioId: string): UserServiceUsage =>
     usageByUser[usuarioId] ?? { gimnasio: 0, piscina: 0, guardarropas: 0, tenis_mesa: 0 }
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const suffix = hasActiveFilters ? "filtrado" : "completo"
+    const columns = GYM_EXCEL_OPTIONAL_COLUMNS.map((col) => col.key)
+    const sedeByUser = columns.includes("sede") ? await buildUserSedeLabels() : undefined
     exportUsersUsageExcel(
       filteredUsuarios,
       usageByUser,
-      GYM_EXCEL_OPTIONAL_COLUMNS.map((col) => col.key),
+      columns,
       {
         fileSuffix: suffix,
         onlyWithUsage: false,
         includeGuardarropas: true,
+        sedeByUser,
       },
     )
   }
