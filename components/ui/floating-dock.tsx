@@ -21,8 +21,8 @@ export const FloatingDockVertical = ({
 }) => {
   return (
     <div className={cn("flex flex-col items-center gap-2", className)}>
-      {items.map((item) => (
-        <IconItem key={item.title} {...item} />
+      {items.map((item, index) => (
+        <IconItem key={`${item.title}-${index}`} {...item} />
       ))}
     </div>
   );

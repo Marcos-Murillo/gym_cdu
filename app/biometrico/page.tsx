@@ -22,8 +22,8 @@ import {
   getUsers, getBiometricData, updateBiometricData
 } from "@/lib/storage"
 import type { UserProfile, BiometricData } from "@/lib/types"
-import { useAuth } from "@/lib/auth-context"
-import { filterBySede, getStaffSede } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
+import { filterBySede } from "@/lib/sede"
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend
@@ -38,8 +38,7 @@ export default function BiometricoPage() {
 }
 
 function BiometricoContent() {
-  const { user } = useAuth()
-  const staffSede = getStaffSede(user)
+  const { sede: staffSede } = useOperatingSede()
   // Datos globales
   const [allRecords, setAllRecords] = useState<BiometricData[]>([])
   const [allUsers, setAllUsers] = useState<UserProfile[]>([])
@@ -67,13 +66,12 @@ function BiometricoContent() {
     circunferenciaCintura: "", circunferenciaCadera: "", frecuenciaCardiacaReposo: "", notas: "",
   })
 
-  useEffect(() => { loadData() }, [staffSede, user?.rol])
+  useEffect(() => { loadData() }, [staffSede])
 
   const loadData = async () => {
     setLoading(true)
     const [records, users] = await Promise.all([getBiometricData(), getUsers()])
-    const campusRecords =
-      user?.rol === "superadmin" ? records : filterBySede(records, staffSede)
+    const campusRecords = filterBySede(records, staffSede)
     setAllRecords(campusRecords.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()))
     setAllUsers(users)
     setLoading(false)

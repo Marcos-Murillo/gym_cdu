@@ -15,6 +15,7 @@ import { db } from "./firebase"
 import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord } from "./types"
 import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
 import { guardarropasAppliesToSede } from "./sede-rules"
+import { localDateISO } from "./utils"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -150,6 +151,15 @@ export async function getEntries(): Promise<EntryRecord[]> {
   })) as EntryRecord[]
 }
 
+export async function getEntriesByDate(fecha: string): Promise<EntryRecord[]> {
+  const q = query(collection(db, ENTRIES_COLLECTION), where("fecha", "==", fecha))
+  const querySnapshot = await getDocs(q)
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as EntryRecord[]
+}
+
 export async function saveEntry(
   usuarioId: string,
   instalacion: "gimnasio" | "piscina" = "gimnasio",
@@ -161,7 +171,7 @@ export async function saveEntry(
     usuarioId,
     instalacion,
     sede: campus,
-    fecha: now.toISOString().split("T")[0],
+    fecha: localDateISO(now),
     hora: now.toTimeString().split(" ")[0],
   }
   const docRef = await addDoc(collection(db, ENTRIES_COLLECTION), newEntry)

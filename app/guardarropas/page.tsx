@@ -21,8 +21,7 @@ import {
   User,
 } from "lucide-react"
 import type { LockerRecord, UserProfile } from "@/lib/types"
-import { useAuth } from "@/lib/auth-context"
-import { getStaffSede } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
 
 export default function GuardarropasPage() {
   return (
@@ -33,8 +32,7 @@ export default function GuardarropasPage() {
 }
 
 function GuardarropasContent() {
-  const { user } = useAuth()
-  const staffSede = getStaffSede(user)
+  const { sede: staffSede } = useOperatingSede()
   // Tab: depositar — paso 1: buscar usuario
   const [busqueda, setBusqueda] = useState("")
   const [usuarioEncontrado, setUsuarioEncontrado] = useState<UserProfile | null>(null)

@@ -10,10 +10,11 @@ import { useState } from "react"
 import {
   DoorOpen, BarChart3, Users, Activity,
   Waves, Package, ShieldCheck, LogOut, UserCog,
-  ClipboardList, CalendarCheck, LogIn, CircleDot,
+  ClipboardList, CalendarCheck, CircleDot, Building2, ListChecks,
 } from "lucide-react"
-import type { UserRole, Espacio } from "@/lib/types"
-import { getStaffSede } from "@/lib/sede"
+import type { UserRole, Espacio, Sede } from "@/lib/types"
+import { SEDE_LABELS, SEDES_ACTIVAS } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
 import { guardarropasAppliesToSede, usesFixedTableTennisInventory } from "@/lib/sede-rules"
 
 interface NavItem {
@@ -27,6 +28,7 @@ interface NavItem {
 
 const espaciosItems: NavItem[] = [
   { href: "/gimnasio",    label: "Gimnasio",      icon: DoorOpen,      roles: ["superadmin", "admin", "monitor"], espacio: "gimnasio" },
+  { href: "/gimnasio/entradas", label: "Entradas gimnasio", icon: ListChecks, roles: ["superadmin", "admin", "monitor"] },
   { href: "/piscina",     label: "Piscina",        icon: Waves,         roles: ["superadmin", "admin", "monitor"], espacio: "piscina" },
   { href: "/guardarropas",label: "Guardarropas",   icon: Package,       roles: ["superadmin", "admin", "monitor"], espacio: "guardarropas" },
   { href: "/tenis-mesa",  label: "Tenis de mesa",  icon: CircleDot,     roles: ["superadmin", "admin", "monitor"], espacio: "tenis_mesa" },
@@ -58,14 +60,14 @@ export function Navigation() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuth()
+  const { sede: staffSede, setActiveSede, canSwitch } = useOperatingSede()
   const [logoutDialog, setLogoutDialog] = useState(false)
+  const [sedeDialog, setSedeDialog] = useState(false)
   const [checkingSalida, setCheckingSalida] = useState(false)
 
   if (!user) return null
 
   const userEspacio = user.espacio ?? undefined
-
-  const staffSede = getStaffSede(user)
   const showGuardarropas = guardarropasAppliesToSede(staffSede)
 
   const fixedInventory = usesFixedTableTennisInventory(staffSede)
@@ -73,6 +75,7 @@ export function Navigation() {
   const visibleEspacios = espaciosItems.filter((i) => {
     if (i.href === "/guardarropas" && !showGuardarropas) return false
     if ((i.href === "/gimnasio" || i.href === "/piscina") && !fixedInventory) return false
+    if (i.href === "/gimnasio/entradas" && fixedInventory) return false
     return canSeeItem(i, user.rol, userEspacio)
   })
   const visibleAdmin = adminItems.filter((i) => {
@@ -123,7 +126,34 @@ export function Navigation() {
     active: false,
   }
 
+  const handleSedeChange = (next: Sede) => {
+    setActiveSede(next)
+    setSedeDialog(false)
+    if (
+      next === "san_fernando" &&
+      (pathname === "/gimnasio" ||
+        pathname.startsWith("/piscina") ||
+        pathname.startsWith("/guardarropas"))
+    ) {
+      router.push("/gimnasio/entradas")
+    }
+    if (next === "melendez" && (pathname === "/gimnasio/entradas" || pathname.startsWith("/tenis-mesa/inventario"))) {
+      router.push(pathname.startsWith("/tenis-mesa") ? "/tenis-mesa" : "/gimnasio")
+    }
+  }
+
+  const sedeItem: DockItem | null = canSwitch
+    ? {
+        title: `Sede: ${SEDE_LABELS[staffSede]}`,
+        href: "#",
+        icon: <Building2 className="w-full h-full" />,
+        onClick: () => setSedeDialog(true),
+        active: false,
+      }
+    : null
+
   const allItems: DockItem[] = [
+    ...(sedeItem ? [sedeItem, separator] : []),
     ...toItems(visibleEspacios),
     ...(visibleEspacios.length > 0 && visibleAdmin.length > 0 ? [separator] : []),
     ...toItems(visibleAdmin),
@@ -137,6 +167,29 @@ export function Navigation() {
       <div className="fixed left-4 top-1/2 -translate-y-1/2 z-50">
         <FloatingDockVertical items={allItems} />
       </div>
+
+      <Dialog open={sedeDialog} onOpenChange={setSedeDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Cambiar sede</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Estás en <strong>{SEDE_LABELS[staffSede]}</strong>. El conteo y los espacios siguen la sede activa. El informe conjunto se elige al generar el PDF en Estadísticas.
+          </p>
+          <div className="grid gap-2">
+            {SEDES_ACTIVAS.map((s) => (
+              <Button
+                key={s}
+                variant={staffSede === s ? "default" : "outline"}
+                className={staffSede === s ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+                onClick={() => handleSedeChange(s)}
+              >
+                {SEDE_LABELS[s]}
+              </Button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: recordatorio salida */}
       <Dialog open={logoutDialog} onOpenChange={setLogoutDialog}>

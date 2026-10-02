@@ -12,11 +12,10 @@ import {
   Mail, Phone, GraduationCap, Building2, Calendar, Info
 } from "lucide-react"
 import type { UserProfile, EntryRecord } from "@/lib/types"
-import { useAuth } from "@/lib/auth-context"
-import { getStaffSede } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
 
 export default function GimnasioContent() {
-  const { user } = useAuth()
+  const { sede: staffSede } = useOperatingSede()
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [entradas, setEntradas] = useState<EntryRecord[]>([])
@@ -49,7 +48,7 @@ export default function GimnasioContent() {
   const handleRegisterEntry = async () => {
     if (!usuario) return
     const storage = await import("@/lib/storage")
-    await storage.saveEntry(usuario.id, "gimnasio", getStaffSede(user))
+    await storage.saveEntry(usuario.id, "gimnasio", staffSede)
     setSuccess(true)
     const userEntries = await storage.getEntriesByUser(usuario.id)
     setEntradas(userEntries)

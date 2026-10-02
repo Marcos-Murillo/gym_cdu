@@ -26,13 +26,14 @@ import { ExcelColumnSelector } from "@/components/excel-column-selector"
 import type { AttendanceStats } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import {
-  canViewAllSedes,
+  canOperateAllSedes,
   getStaffSede,
   SEDE_LABELS,
   SEDES_ACTIVAS,
   type Sede,
   type SedeFiltro,
 } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
 import { guardarropasAppliesToSede } from "@/lib/sede-rules"
 import {
   DropdownMenu,
@@ -68,13 +69,14 @@ export default function EstadisticasPage() {
 
 function EstadisticasContent() {
   const { user } = useAuth()
+  const { sede: sedeActiva, setActiveSede } = useOperatingSede()
   const [stats, setStats] = useState<AttendanceStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState<Filtro>("todas")
   const [filtroSede, setFiltroSede] = useState<SedeFiltro>("todas")
   const [pdfLoading, setPdfLoading] = useState(false)
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false)
-  const [pdfCompleto, setPdfCompleto] = useState(false)
+  const [pdfSede, setPdfSede] = useState<SedeFiltro>("todas")
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
   const [excelDialogOpen, setExcelDialogOpen] = useState(false)
@@ -85,10 +87,14 @@ function EstadisticasContent() {
   const [advFacultad, setAdvFacultad] = useState("TODOS")
   const [advPrograma, setAdvPrograma] = useState("TODOS")
 
-  const puedeVerTodasSedes = user ? canViewAllSedes(user.rol) : false
-  const sedeEfectiva: SedeFiltro = puedeVerTodasSedes ? filtroSede : getStaffSede(user)
+  const puedeCambiarSede = user ? canOperateAllSedes(user.rol) : false
+  const sedeEfectiva: SedeFiltro = puedeCambiarSede ? filtroSede : getStaffSede(user)
   const includeGuardarropas = guardarropasAppliesToSede(sedeEfectiva)
   const hasAdvancedFilters = advFacultad !== "TODOS" || advPrograma !== "TODOS"
+
+  useEffect(() => {
+    if (puedeCambiarSede) setFiltroSede(sedeActiva)
+  }, [sedeActiva, puedeCambiarSede])
 
   useEffect(() => {
     const loadStats = async () => {
@@ -113,7 +119,7 @@ function EstadisticasContent() {
   const handleOpenPdfDialog = () => {
     setFechaDesde("")
     setFechaHasta("")
-    setPdfCompleto(false)
+    setPdfSede(puedeCambiarSede ? filtroSede : getStaffSede(user))
     setPdfDialogOpen(true)
   }
 
@@ -125,8 +131,9 @@ function EstadisticasContent() {
       const range = { desde: fechaDesde || undefined, hasta: fechaHasta || undefined }
       const desde = fechaDesde || undefined
       const hasta = fechaHasta || undefined
+      const sedeReporte: SedeFiltro = puedeCambiarSede ? pdfSede : getStaffSede(user)
 
-      if (pdfCompleto && puedeVerTodasSedes && filtroSede === "todas") {
+      if (sedeReporte === "todas") {
         const loadFor = async (sede: SedeFiltro) =>
           filtro === "tenis_mesa"
             ? generateTableTennisStats(desde, hasta, sede)
@@ -145,16 +152,14 @@ function EstadisticasContent() {
       } else {
         const statsWithRange =
           filtro === "tenis_mesa"
-            ? await generateTableTennisStats(desde, hasta, sedeEfectiva)
+            ? await generateTableTennisStats(desde, hasta, sedeReporte)
             : await generateStats(
                 filtro === "todas" ? undefined : filtro,
                 desde,
                 hasta,
-                sedeEfectiva,
+                sedeReporte,
               )
-        const sedeLabel =
-          sedeEfectiva === "todas" ? "Todas las sedes" : SEDE_LABELS[sedeEfectiva as Sede]
-        generateGymPDFReport(statsWithRange, filtro, range, sedeLabel)
+        generateGymPDFReport(statsWithRange, filtro, range, SEDE_LABELS[sedeReporte])
       }
     } finally {
       setPdfLoading(false)
@@ -245,26 +250,30 @@ function EstadisticasContent() {
         <h1 className="text-3xl font-bold text-foreground">Estadisticas Generales</h1>
         <p className="text-muted-foreground">
           Resumen de usuarios y entradas registradas
-          {!puedeVerTodasSedes && user && (
-            <> · Sede <strong>{SEDE_LABELS[getStaffSede(user)]}</strong></>
-          )}
+          {" · "}
+          <strong>
+            {sedeEfectiva === "todas" ? "Juntas (sumatoria)" : `Sede ${SEDE_LABELS[sedeEfectiva]}`}
+          </strong>
         </p>
       </div>
 
-      {puedeVerTodasSedes && (
+      {puedeCambiarSede && (
         <div className="flex flex-wrap justify-center gap-2">
           <Button
             variant={filtroSede === "todas" ? "default" : "outline"}
             onClick={() => setFiltroSede("todas")}
             className={filtroSede === "todas" ? "bg-indigo-600 hover:bg-indigo-700" : ""}
           >
-            Todas las sedes
+            Juntas
           </Button>
           {SEDES_ACTIVAS.map((s) => (
             <Button
               key={s}
               variant={filtroSede === s ? "default" : "outline"}
-              onClick={() => setFiltroSede(s)}
+              onClick={() => {
+                setFiltroSede(s)
+                setActiveSede(s)
+              }}
               className={filtroSede === s ? "bg-indigo-600 hover:bg-indigo-700" : ""}
             >
               {SEDE_LABELS[s]}
@@ -451,7 +460,7 @@ function EstadisticasContent() {
           <DialogHeader>
             <DialogTitle>Rango de fechas del reporte</DialogTitle>
             <DialogDescription>
-              Opcional. Deja en blanco para incluir todos los datos.
+              Elige la sede del informe y, si quieres, un rango de fechas. En blanco incluye todo el historial.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -473,16 +482,31 @@ function EstadisticasContent() {
                 onChange={(e) => setFechaHasta(e.target.value)}
               />
             </div>
-            {puedeVerTodasSedes && filtroSede === "todas" && (
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={pdfCompleto}
-                  onChange={(e) => setPdfCompleto(e.target.checked)}
-                  className="h-4 w-4 rounded border-input"
-                />
-                Incluir resumen institucional + desglose por sede (Melendez y San Fernando)
-              </label>
+            {puedeCambiarSede && (
+              <div className="space-y-2">
+                <Label>Sede del informe</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {SEDES_ACTIVAS.map((s) => (
+                    <Button
+                      key={s}
+                      type="button"
+                      variant={pdfSede === s ? "default" : "outline"}
+                      className={pdfSede === s ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+                      onClick={() => setPdfSede(s)}
+                    >
+                      {SEDE_LABELS[s]}
+                    </Button>
+                  ))}
+                  <Button
+                    type="button"
+                    variant={pdfSede === "todas" ? "default" : "outline"}
+                    className={pdfSede === "todas" ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+                    onClick={() => setPdfSede("todas")}
+                  >
+                    Juntas (sumatoria de ambas sedes)
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
           <DialogFooter>

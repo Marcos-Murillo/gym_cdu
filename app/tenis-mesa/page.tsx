@@ -46,7 +46,8 @@ import {
   loanUsuarioNombre,
   returnTableTennisPaddles,
 } from "@/lib/table-tennis-storage"
-import { getStaffSede, SEDE_LABELS } from "@/lib/sede"
+import { SEDE_LABELS } from "@/lib/sede"
+import { useOperatingSede } from "@/lib/sede-context"
 import { usesFixedTableTennisInventory } from "@/lib/sede-rules"
 import { TenisMesaSfOperations } from "@/components/tenis-mesa-sf-operations"
 
@@ -60,7 +61,7 @@ export default function TenisMesaPage() {
 
 function TenisMesaRouter() {
   const { user } = useAuth()
-  const staffSede = getStaffSede(user)
+  const { sede: staffSede } = useOperatingSede()
   if (!usesFixedTableTennisInventory(staffSede)) {
     return <TenisMesaSfOperations user={user} />
   }
@@ -69,7 +70,7 @@ function TenisMesaRouter() {
 
 function TenisMesaMelendezContent() {
   const { user } = useAuth()
-  const staffSede = getStaffSede(user)
+  const { sede: staffSede } = useOperatingSede()
   const [activos, setActivos] = useState<TableTennisLoan[]>([])
   const [reportes, setReportes] = useState<TableTennisReport[]>([])
   const [historial, setHistorial] = useState<TableTennisHistoryEntry[]>([])

@@ -48,7 +48,7 @@ function InventarioContent() {
   const [tableId, setTableId] = useState("")
   const [serial, setSerial] = useState("")
 
-  const canManage = user && (user.rol === "superadmin" || isSanFernandoStaff(user))
+  const canManage = user && (user.rol === "superadmin" || user.rol === "admin" || isSanFernandoStaff(user))
 
   const load = useCallback(async () => {
     setLoading(true)

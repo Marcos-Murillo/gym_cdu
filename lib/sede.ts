@@ -11,7 +11,7 @@ export const SEDE_LABELS: Record<Sede, string> = {
   san_fernando: "San Fernando",
 }
 
-/** Filtro de estadísticas / PDF: una sede o todas (solo superadmin). */
+/** Filtro de estadísticas / PDF: una sede o la sumatoria de ambas. */
 export type SedeFiltro = Sede | "todas"
 
 const ALIASES: Record<string, Sede> = {
@@ -33,6 +33,11 @@ export function resolveSede(value?: string | null): Sede {
 
 export function canViewAllSedes(rol: UserRole): boolean {
   return rol === "superadmin"
+}
+
+/** Admin y super admin operan y consultan Melendez y San Fernando. */
+export function canOperateAllSedes(rol: UserRole): boolean {
+  return rol === "superadmin" || rol === "admin"
 }
 
 /** Sede del staff que opera el kiosco; documentos legacy sin campo → Melendez. */
