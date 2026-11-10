@@ -12,3 +12,10 @@ export function localDateISO(date = new Date()): string {
   const d = String(date.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
 }
+
+/** Hora local HH:MM. No usa toTimeString, cuyo formato depende del idioma del navegador. */
+export function localTimeHM(date = new Date()): string {
+  const h = String(date.getHours()).padStart(2, "0")
+  const m = String(date.getMinutes()).padStart(2, "0")
+  return `${h}:${m}`
+}

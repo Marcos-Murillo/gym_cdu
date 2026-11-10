@@ -23,6 +23,8 @@ import {
 } from "lucide-react"
 import type { UserProfile, EntryRecord } from "@/lib/types"
 import { useOperatingSede } from "@/lib/sede-context"
+import { useAuth } from "@/lib/auth-context"
+import { MonitorAttendanceRequiredAlert, useMonitorAttendanceGate } from "@/components/monitor-attendance-gate"
 
 export default function PiscinaPage() {
   return (
@@ -34,12 +36,16 @@ export default function PiscinaPage() {
 
 function PiscinaContent() {
   const { sede: staffSede } = useOperatingSede()
+  const { user } = useAuth()
+  const attendanceGate = useMonitorAttendanceGate()
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [entradas, setEntradas] = useState<EntryRecord[]>([])
   const [error, setError] = useState("")
+  const [entryError, setEntryError] = useState("")
   const [success, setSuccess] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [savingEntry, setSavingEntry] = useState(false)
 
   const handleSearch = async () => {
     setError("")
@@ -68,16 +74,21 @@ function PiscinaContent() {
   }
 
   const handleRegisterEntry = async () => {
-    if (!usuario) return
-
-    const storage = await import("@/lib/storage")
-    await storage.saveEntry(usuario.id, "piscina", staffSede)
-    setSuccess(true)
-
-    const userEntries = await storage.getEntriesByUser(usuario.id)
-    setEntradas(userEntries.filter(e => e.instalacion === "piscina"))
-
-    setTimeout(() => setSuccess(false), 3000)
+    if (!usuario || !user || attendanceGate.blocked) return
+    setEntryError("")
+    setSavingEntry(true)
+    try {
+      const storage = await import("@/lib/storage")
+      await storage.saveEntryAsStaff(usuario.id, "piscina", staffSede, { id: user.id, rol: user.rol })
+      setSuccess(true)
+      const userEntries = await storage.getEntriesByUser(usuario.id)
+      setEntradas(userEntries.filter(e => e.instalacion === "piscina"))
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setSuccess(false)
+      setEntryError(err instanceof Error ? err.message : "No se pudo registrar la entrada.")
+    }
+    setSavingEntry(false)
   }
 
   const handleReset = () => {
@@ -114,6 +125,7 @@ function PiscinaContent() {
               Puedes buscar por numero de documento, nombre completo o codigo estudiantil
             </AlertDescription>
           </Alert>
+          <MonitorAttendanceRequiredAlert show={attendanceGate.blocked && !attendanceGate.loading} />
 
           <div className="flex gap-4">
             <div className="flex-1">
@@ -157,6 +169,13 @@ function PiscinaContent() {
               <AlertDescription className="text-cyan-700">
                 Tu entrada a la piscina ha sido registrada exitosamente.
               </AlertDescription>
+            </Alert>
+          )}
+          {entryError && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>No se registró la entrada</AlertTitle>
+              <AlertDescription>{entryError}</AlertDescription>
             </Alert>
           )}
         </CardContent>
@@ -217,9 +236,10 @@ function PiscinaContent() {
                 onClick={handleRegisterEntry}
                 size="lg"
                 className="bg-cyan-600 hover:bg-cyan-700 px-8"
+                disabled={attendanceGate.blocked || attendanceGate.loading || savingEntry}
               >
                 <Waves className="h-5 w-5 mr-2" />
-                Registrar Entrada Piscina
+                {savingEntry ? "Registrando..." : "Registrar Entrada Piscina"}
               </Button>
             </div>
 

@@ -12,10 +12,12 @@ import {
   Timestamp
 } from "firebase/firestore"
 import { db } from "./firebase"
-import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord } from "./types"
+import type { UserProfile, BiometricData, EntryRecord, AttendanceStats, LockerRecord, AttendanceRecord, UserRole } from "./types"
 import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
 import { guardarropasAppliesToSede } from "./sede-rules"
-import { localDateISO } from "./utils"
+import { localDateISO, localTimeHM } from "./utils"
+import { applyDailyAttendanceCap, todayLocal } from "./attendance-time"
+import { assertInsideCdu, type DevicePosition } from "./cdu-geofence"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -172,13 +174,34 @@ export async function saveEntry(
     instalacion,
     sede: campus,
     fecha: localDateISO(now),
-    hora: now.toTimeString().split(" ")[0],
+    hora: localTimeHM(now),
   }
   const docRef = await addDoc(collection(db, ENTRIES_COLLECTION), newEntry)
   return {
     ...newEntry,
     id: docRef.id,
   } as EntryRecord
+}
+
+export class AttendanceRequiredError extends Error {
+  constructor() {
+    super("Debes marcar tu asistencia de entrada antes de registrar entradas de usuarios.")
+    this.name = "AttendanceRequiredError"
+  }
+}
+
+/** Registra la entrada de un usuario. Un monitor solo puede hacerlo si ya marcó su asistencia de hoy. */
+export async function saveEntryAsStaff(
+  usuarioId: string,
+  instalacion: "gimnasio" | "piscina",
+  sede: Sede | undefined,
+  staff: { id: string; rol: UserRole },
+): Promise<EntryRecord> {
+  if (staff.rol === "monitor") {
+    const attendance = await getTodayAttendance(staff.id)
+    if (!attendance?.horaEntrada) throw new AttendanceRequiredError()
+  }
+  return saveEntry(usuarioId, instalacion, sede)
 }
 
 export async function getEntriesByUser(usuarioId: string): Promise<EntryRecord[]> {
@@ -512,47 +535,70 @@ export async function getAttendanceRecords(): Promise<AttendanceRecord[]> {
 }
 
 export async function getTodayAttendance(monitorId: string): Promise<AttendanceRecord | null> {
-  const today = new Date().toISOString().split("T")[0]
+  const { fecha } = todayLocal()
   const q = query(
     collection(db, ATTENDANCE_COLLECTION),
     where("monitorId", "==", monitorId),
-    where("fecha", "==", today)
+    where("fecha", "==", fecha)
   )
   const snap = await getDocs(q)
   if (snap.empty) return null
-  const d = snap.docs[0]
-  return { id: d.id, ...d.data() } as AttendanceRecord
+  const records = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as AttendanceRecord)
+  const open = records.find((r) => r.horaEntrada && !r.horaSalida)
+  if (open) return open
+  return records.sort((a, b) => b.horaEntrada.localeCompare(a.horaEntrada))[0] ?? null
 }
 
 export async function registerAttendanceEntry(
   monitorId: string,
   monitorNombre: string,
   espacio: string,
-  sede?: Sede,
+  sede: Sede | undefined,
+  position: DevicePosition,
 ): Promise<AttendanceRecord> {
-  const now = new Date()
+  const existing = await getTodayAttendance(monitorId)
+  if (existing) return existing
+
+  assertInsideCdu(position)
+  const { fecha, hora } = todayLocal()
   const record = {
     monitorId,
     monitorNombre,
     espacio,
     sede: resolveSede(sede),
-    fecha: now.toISOString().split("T")[0],
-    horaEntrada: now.toTimeString().slice(0, 5),
+    fecha,
+    horaEntrada: hora,
+    latitud: position.latitud,
+    longitud: position.longitud,
+    precisionMetros: Math.round(position.precisionMetros),
   }
   const ref = await addDoc(collection(db, ATTENDANCE_COLLECTION), record)
   return { ...record, id: ref.id }
 }
 
-export async function registerAttendanceExit(id: string): Promise<void> {
+export async function registerAttendanceExit(
+  id: string,
+  position: DevicePosition,
+): Promise<{ record: AttendanceRecord; capped: boolean } | null> {
+  assertInsideCdu(position)
   const docRef = doc(db, ATTENDANCE_COLLECTION, id)
   const snap = await getDoc(docRef)
-  if (!snap.exists()) return
+  if (!snap.exists()) return null
   const data = snap.data() as AttendanceRecord
-  const now = new Date()
-  const horaSalida = now.toTimeString().slice(0, 5)
-  // calcular duración
-  const [eh, em] = data.horaEntrada.split(":").map(Number)
-  const [sh, sm] = horaSalida.split(":").map(Number)
-  const duracionMinutos = (sh * 60 + sm) - (eh * 60 + em)
-  await updateDoc(docRef, { horaSalida, duracionMinutos: Math.max(0, duracionMinutos) })
+  const { fecha, hora } = todayLocal()
+  const { horaSalida, duracionMinutos, capped } = applyDailyAttendanceCap(
+    data.horaEntrada,
+    hora,
+    data.fecha,
+    fecha,
+  )
+  const salida = {
+    horaSalida,
+    duracionMinutos,
+    latitudSalida: position.latitud,
+    longitudSalida: position.longitud,
+    precisionSalidaMetros: Math.round(position.precisionMetros),
+  }
+  await updateDoc(docRef, salida)
+  return { record: { ...data, id, ...salida }, capped }
 }

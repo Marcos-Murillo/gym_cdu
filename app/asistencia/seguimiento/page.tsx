@@ -11,6 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Users, Clock, CalendarDays, TrendingUp, Filter } from "lucide-react"
 import { getAttendanceRecords, getSystemUsers } from "@/lib/storage"
 import type { AttendanceRecord, SystemUser } from "@/lib/types"
+import { localDateISO } from "@/lib/utils"
+import { startOfLocalMonth, startOfLocalWeek } from "@/lib/attendance-time"
 
 export default function SeguimientoAsistenciaPage() {
   return (
@@ -18,17 +20,6 @@ export default function SeguimientoAsistenciaPage() {
       <SeguimientoContent />
     </RouteGuard>
   )
-}
-
-function startOfWeek(): string {
-  const d = new Date()
-  d.setDate(d.getDate() - d.getDay() + 1)
-  return d.toISOString().split("T")[0]
-}
-
-function startOfMonth(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`
 }
 
 function formatMin(min: number): string {
@@ -45,8 +36,8 @@ function SeguimientoContent() {
   // Filtros
   const [filtroMonitor, setFiltroMonitor] = useState("todos")
   const [filtroEspacio, setFiltroEspacio] = useState("todos")
-  const [filtroDesde, setFiltroDesde] = useState(startOfMonth())
-  const [filtroHasta, setFiltroHasta] = useState(new Date().toISOString().split("T")[0])
+  const [filtroDesde, setFiltroDesde] = useState(() => startOfLocalMonth())
+  const [filtroHasta, setFiltroHasta] = useState(() => localDateISO())
 
   useEffect(() => {
     const load = async () => {
@@ -83,11 +74,11 @@ function SeguimientoContent() {
   }, [filtered])
 
   // Stats semana actual por monitor (independiente de filtros de fecha)
-  const semanaRecords = records.filter(r => r.fecha >= startOfWeek())
+  const semanaRecords = records.filter(r => r.fecha >= startOfLocalWeek())
   const minSemana = (monitorId: string) =>
     semanaRecords.filter(r => r.monitorId === monitorId).reduce((a, r) => a + (r.duracionMinutos ?? 0), 0)
 
-  const mesRecords = records.filter(r => r.fecha >= startOfMonth())
+  const mesRecords = records.filter(r => r.fecha >= startOfLocalMonth())
   const minMes = (monitorId: string) =>
     mesRecords.filter(r => r.monitorId === monitorId).reduce((a, r) => a + (r.duracionMinutos ?? 0), 0)
 
@@ -101,7 +92,7 @@ function SeguimientoContent() {
         </div>
         <div>
           <h1 className="text-2xl font-bold">Seguimiento de Asistencias</h1>
-          <p className="text-sm text-muted-foreground">Control de asistencia de monitores</p>
+          <p className="text-sm text-muted-foreground">Control de asistencia de monitores. Cada día cuenta como máximo 4 horas.</p>
         </div>
       </div>
 

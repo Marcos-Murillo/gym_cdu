@@ -98,6 +98,12 @@ export interface AttendanceRecord {
   horaEntrada: string
   horaSalida?: string
   duracionMinutos?: number
+  latitud?: number
+  longitud?: number
+  precisionMetros?: number
+  latitudSalida?: number
+  longitudSalida?: number
+  precisionSalidaMetros?: number
 }
 
 /** Registro público de control de acceso (cédula/código + mesa). */

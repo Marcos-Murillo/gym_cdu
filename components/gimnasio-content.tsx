@@ -13,15 +13,21 @@ import {
 } from "lucide-react"
 import type { UserProfile, EntryRecord } from "@/lib/types"
 import { useOperatingSede } from "@/lib/sede-context"
+import { useAuth } from "@/lib/auth-context"
+import { MonitorAttendanceRequiredAlert, useMonitorAttendanceGate } from "@/components/monitor-attendance-gate"
 
 export default function GimnasioContent() {
   const { sede: staffSede } = useOperatingSede()
+  const { user } = useAuth()
+  const attendanceGate = useMonitorAttendanceGate()
   const [codigo, setCodigo] = useState("")
   const [usuario, setUsuario] = useState<UserProfile | null>(null)
   const [entradas, setEntradas] = useState<EntryRecord[]>([])
   const [error, setError] = useState("")
+  const [entryError, setEntryError] = useState("")
   const [success, setSuccess] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [savingEntry, setSavingEntry] = useState(false)
 
   const handleSearch = async () => {
     setError("")
@@ -46,13 +52,21 @@ export default function GimnasioContent() {
   }
 
   const handleRegisterEntry = async () => {
-    if (!usuario) return
-    const storage = await import("@/lib/storage")
-    await storage.saveEntry(usuario.id, "gimnasio", staffSede)
-    setSuccess(true)
-    const userEntries = await storage.getEntriesByUser(usuario.id)
-    setEntradas(userEntries)
-    setTimeout(() => setSuccess(false), 3000)
+    if (!usuario || !user || attendanceGate.blocked) return
+    setEntryError("")
+    setSavingEntry(true)
+    try {
+      const storage = await import("@/lib/storage")
+      await storage.saveEntryAsStaff(usuario.id, "gimnasio", staffSede, { id: user.id, rol: user.rol })
+      setSuccess(true)
+      const userEntries = await storage.getEntriesByUser(usuario.id)
+      setEntradas(userEntries)
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setSuccess(false)
+      setEntryError(err instanceof Error ? err.message : "No se pudo registrar la entrada.")
+    }
+    setSavingEntry(false)
   }
 
   const handleReset = () => {
@@ -89,6 +103,7 @@ export default function GimnasioContent() {
               Puedes buscar por numero de documento, nombre completo o codigo estudiantil
             </AlertDescription>
           </Alert>
+          <MonitorAttendanceRequiredAlert show={attendanceGate.blocked && !attendanceGate.loading} />
           <div className="flex gap-4">
             <div className="flex-1">
               <Label htmlFor="codigo" className="sr-only">Buscar Usuario</Label>
@@ -124,6 +139,13 @@ export default function GimnasioContent() {
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
               <AlertTitle className="text-emerald-800">Entrada Registrada</AlertTitle>
               <AlertDescription className="text-emerald-700">Entrada al gimnasio registrada exitosamente.</AlertDescription>
+            </Alert>
+          )}
+          {entryError && (
+            <Alert variant="destructive">
+              <XCircle className="h-4 w-4" />
+              <AlertTitle>No se registró la entrada</AlertTitle>
+              <AlertDescription>{entryError}</AlertDescription>
             </Alert>
           )}
         </CardContent>
@@ -177,9 +199,14 @@ export default function GimnasioContent() {
               </div>
             </div>
             <div className="flex justify-center">
-              <Button onClick={handleRegisterEntry} size="lg" className="bg-emerald-600 hover:bg-emerald-700 px-8">
+              <Button
+                onClick={handleRegisterEntry}
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 px-8"
+                disabled={attendanceGate.blocked || attendanceGate.loading || savingEntry}
+              >
                 <DoorOpen className="h-5 w-5 mr-2" />
-                Registrar Entrada
+                {savingEntry ? "Registrando..." : "Registrar Entrada"}
               </Button>
             </div>
             {entradas.length > 0 && (
