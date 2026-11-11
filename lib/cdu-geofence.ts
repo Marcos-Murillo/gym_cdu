@@ -1,7 +1,7 @@
 /** Punto del CDU tomado en Google Maps. El navegador usa el mismo sistema (WGS84). */
 export const CDU_LAT = 3.370776
 export const CDU_LNG = -76.532996
-export const CDU_RADIUS_METERS = 40
+export const CDU_RADIUS_METERS = 100
 
 export type DevicePosition = {
   latitud: number
