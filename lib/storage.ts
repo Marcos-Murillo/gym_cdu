@@ -17,7 +17,7 @@ import { filterBySede, resolveSede, type Sede, type SedeFiltro } from "./sede"
 import { guardarropasAppliesToSede } from "./sede-rules"
 import { localDateISO, localTimeHM } from "./utils"
 import { applyDailyAttendanceCap, todayLocal } from "./attendance-time"
-import { assertInsideCdu, type DevicePosition } from "./cdu-geofence"
+import { assertInsideAttendanceSite, type DevicePosition } from "./cdu-geofence"
 
 const USERS_COLLECTION = "users"
 const LOCKERS_COLLECTION = "lockers"
@@ -559,7 +559,7 @@ export async function registerAttendanceEntry(
   const existing = await getTodayAttendance(monitorId)
   if (existing) return existing
 
-  assertInsideCdu(position)
+  assertInsideAttendanceSite(position, espacio)
   const { fecha, hora } = todayLocal()
   const record = {
     monitorId,
@@ -580,11 +580,11 @@ export async function registerAttendanceExit(
   id: string,
   position: DevicePosition,
 ): Promise<{ record: AttendanceRecord; capped: boolean } | null> {
-  assertInsideCdu(position)
   const docRef = doc(db, ATTENDANCE_COLLECTION, id)
   const snap = await getDoc(docRef)
   if (!snap.exists()) return null
   const data = snap.data() as AttendanceRecord
+  assertInsideAttendanceSite(position, data.espacio)
   const { fecha, hora } = todayLocal()
   const { horaSalida, duracionMinutos, capped } = applyDailyAttendanceCap(
     data.horaEntrada,

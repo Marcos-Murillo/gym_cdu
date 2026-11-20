@@ -3,6 +3,37 @@ export const CDU_LAT = 3.370776
 export const CDU_LNG = -76.532996
 export const CDU_RADIUS_METERS = 100
 
+/** Mesa de ping pong. Solo aplica a monitores de tenis de mesa. */
+export const PING_PONG_LAT = 3.372871
+export const PING_PONG_LNG = -76.534765
+export const PING_PONG_RADIUS_METERS = 30
+
+export type AttendanceSite = {
+  nombre: string
+  lat: number
+  lng: number
+  radiusMeters: number
+}
+
+export const CDU_SITE: AttendanceSite = {
+  nombre: "CDU",
+  lat: CDU_LAT,
+  lng: CDU_LNG,
+  radiusMeters: CDU_RADIUS_METERS,
+}
+
+export const PING_PONG_SITE: AttendanceSite = {
+  nombre: "tenis de mesa",
+  lat: PING_PONG_LAT,
+  lng: PING_PONG_LNG,
+  radiusMeters: PING_PONG_RADIUS_METERS,
+}
+
+export function attendanceSiteForEspacio(espacio?: string | null): AttendanceSite {
+  if (espacio === "tenis_mesa") return PING_PONG_SITE
+  return CDU_SITE
+}
+
 export type DevicePosition = {
   latitud: number
   longitud: number
@@ -13,11 +44,11 @@ export class OutsideCduError extends Error {
   distanceMeters: number
   accuracyMeters: number
 
-  constructor(distanceMeters: number, accuracyMeters: number) {
+  constructor(distanceMeters: number, accuracyMeters: number, site: AttendanceSite = CDU_SITE) {
     const metros = Math.max(1, Math.round(distanceMeters))
     const margen = Math.max(1, Math.round(accuracyMeters))
     super(
-      `Estás a ${metros} m del CDU. La asistencia solo se puede marcar dentro de ${CDU_RADIUS_METERS} m. El navegador reporta un margen de ±${margen} m.`,
+      `Estás a ${metros} m de ${site.nombre}. La asistencia solo se puede marcar dentro de ${site.radiusMeters} m. El navegador reporta un margen de ±${margen} m.`,
     )
     this.name = "OutsideCduError"
     this.distanceMeters = distanceMeters
@@ -44,11 +75,16 @@ export function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: n
   return 2 * earth * Math.asin(Math.min(1, Math.sqrt(a)))
 }
 
-export function assertInsideCdu(position: DevicePosition): void {
-  const distance = distanceMeters(position.latitud, position.longitud, CDU_LAT, CDU_LNG)
-  if (distance > CDU_RADIUS_METERS) {
-    throw new OutsideCduError(distance, position.precisionMetros)
+export function assertInsideAttendanceSite(position: DevicePosition, espacio?: string | null): void {
+  const site = attendanceSiteForEspacio(espacio)
+  const distance = distanceMeters(position.latitud, position.longitud, site.lat, site.lng)
+  if (distance > site.radiusMeters) {
+    throw new OutsideCduError(distance, position.precisionMetros, site)
   }
+}
+
+export function assertInsideCdu(position: DevicePosition): void {
+  assertInsideAttendanceSite(position)
 }
 
 /** Lee el GPS/Wi‑Fi del dispositivo. Pide permiso de ubicación al navegador. */
@@ -82,8 +118,12 @@ export function readDevicePosition(): Promise<DevicePosition> {
   })
 }
 
-export async function requirePositionAtCdu(): Promise<DevicePosition> {
+export async function requirePositionForEspacio(espacio?: string | null): Promise<DevicePosition> {
   const position = await readDevicePosition()
-  assertInsideCdu(position)
+  assertInsideAttendanceSite(position, espacio)
   return position
+}
+
+export async function requirePositionAtCdu(): Promise<DevicePosition> {
+  return requirePositionForEspacio()
 }

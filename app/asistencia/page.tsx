@@ -11,7 +11,7 @@ import { Clock, LogIn, LogOut, CheckCircle2, CalendarDays, Timer, Bell, MapPin }
 import { useAuth } from "@/lib/auth-context"
 import { getTodayAttendance, registerAttendanceEntry, registerAttendanceExit } from "@/lib/storage"
 import { getStaffSede } from "@/lib/sede"
-import { requirePositionAtCdu, CDU_RADIUS_METERS } from "@/lib/cdu-geofence"
+import { attendanceSiteForEspacio, requirePositionForEspacio } from "@/lib/cdu-geofence"
 import type { AttendanceRecord } from "@/lib/types"
 import {
   MAX_ATTENDANCE_MINUTES,
@@ -63,7 +63,7 @@ function AsistenciaContent() {
     setSaving(true)
     setLocationError("")
     try {
-      const position = await requirePositionAtCdu()
+      const position = await requirePositionForEspacio(user.espacio)
       const r = await registerAttendanceEntry(
         user.id,
         user.nombre,
@@ -85,7 +85,7 @@ function AsistenciaContent() {
     setCapNotice("")
     setLocationError("")
     try {
-      const position = await requirePositionAtCdu()
+      const position = await requirePositionForEspacio(record.espacio)
       const result = await registerAttendanceExit(record.id, position)
       if (result) {
         setRecord(result.record)
@@ -112,6 +112,7 @@ function AsistenciaContent() {
     ? minutesBetweenHM(record!.horaEntrada, ahora.hora, record!.fecha, ahora.fecha)
     : 0
   const counted = Math.min(MAX_ATTENDANCE_MINUTES, elapsed)
+  const site = attendanceSiteForEspacio(user?.espacio)
 
   return (
     <div className="max-w-md mx-auto space-y-6">
@@ -119,7 +120,7 @@ function AsistenciaContent() {
         <h1 className="text-2xl font-bold">Mi Asistencia</h1>
         <p className="text-sm text-muted-foreground capitalize">{today}</p>
         <p className="text-xs text-muted-foreground">Máximo 4 horas por día. Solo puedes registrar una asistencia.</p>
-        <p className="text-xs text-muted-foreground">Solo dentro de {CDU_RADIUS_METERS} m del CDU. El navegador pedirá permiso de ubicación.</p>
+        <p className="text-xs text-muted-foreground">Solo dentro de {site.radiusMeters} m de {site.nombre}. El navegador pedirá permiso de ubicación.</p>
       </div>
 
       {/* Banner recordatorio al entrar */}
