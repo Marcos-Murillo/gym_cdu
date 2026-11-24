@@ -22,6 +22,16 @@ export const CDU_SITE: AttendanceSite = {
   radiusMeters: CDU_RADIUS_METERS,
 }
 
+/** Gimnasio y piscina usan el mismo punto del CDU, con 200 m más de radio. */
+export const GYM_POOL_RADIUS_METERS = CDU_RADIUS_METERS + 200
+
+export const GYM_POOL_SITE: AttendanceSite = {
+  nombre: "CDU",
+  lat: CDU_LAT,
+  lng: CDU_LNG,
+  radiusMeters: GYM_POOL_RADIUS_METERS,
+}
+
 export const PING_PONG_SITE: AttendanceSite = {
   nombre: "tenis de mesa",
   lat: PING_PONG_LAT,
@@ -31,6 +41,7 @@ export const PING_PONG_SITE: AttendanceSite = {
 
 export function attendanceSiteForEspacio(espacio?: string | null): AttendanceSite {
   if (espacio === "tenis_mesa") return PING_PONG_SITE
+  if (espacio === "gimnasio" || espacio === "piscina") return GYM_POOL_SITE
   return CDU_SITE
 }
 
