@@ -333,7 +333,7 @@ export async function generateTableTennisStats(
     entradasPorDia: Object.entries(entradasPorDiaMap)
       .map(([fecha, cantidad]) => ({ fecha, cantidad }))
       .sort((a, b) => a.fecha.localeCompare(b.fecha))
-      .slice(-30),
+      .slice(fechaDesde || fechaHasta ? 0 : -30),
     entradasPorHora: Object.entries(entradasPorHoraMap)
       .map(([hora, cantidad]) => ({ hora, cantidad }))
       .sort((a, b) => a.hora.localeCompare(b.hora)),

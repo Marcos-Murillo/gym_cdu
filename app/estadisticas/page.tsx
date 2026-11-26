@@ -35,6 +35,8 @@ import {
 } from "@/lib/sede"
 import { useOperatingSede } from "@/lib/sede-context"
 import { guardarropasAppliesToSede } from "@/lib/sede-rules"
+import { localDateISO } from "@/lib/utils"
+import { startOfLocalMonth, startOfLocalWeek } from "@/lib/attendance-time"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,6 +60,56 @@ import {
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
 type Filtro = "todas" | "gimnasio" | "piscina" | "tenis_mesa"
+type Periodo = "todo" | "dia" | "semana" | "mes" | "anio" | "rango"
+
+function formatFechaCorta(iso: string): string {
+  if (!iso) return ""
+  const [y, m, d] = iso.split("-")
+  return `${d}/${m}/${y}`
+}
+
+function endOfMonthISO(from = new Date()): string {
+  return localDateISO(new Date(from.getFullYear(), from.getMonth() + 1, 0))
+}
+
+function endOfWeekISO(from = new Date()): string {
+  const start = startOfLocalWeek(from)
+  const [y, m, d] = start.split("-").map(Number)
+  const date = new Date(y, m - 1, d)
+  date.setDate(date.getDate() + 6)
+  return localDateISO(date)
+}
+
+function rangoDePeriodo(periodo: Exclude<Periodo, "todo" | "rango">): { desde: string; hasta: string } {
+  const today = localDateISO()
+  if (periodo === "dia") return { desde: today, hasta: today }
+  if (periodo === "semana") return { desde: startOfLocalWeek(), hasta: endOfWeekISO() }
+  if (periodo === "mes") return { desde: startOfLocalMonth(), hasta: endOfMonthISO() }
+  const year = new Date().getFullYear()
+  return { desde: `${year}-01-01`, hasta: `${year}-12-31` }
+}
+
+function etiquetaPeriodo(periodo: Periodo, desde: string, hasta: string): string {
+  if (periodo === "todo") return "Todo el historial"
+  if (periodo === "dia") return `Hoy (${formatFechaCorta(desde)})`
+  if (periodo === "semana") return `Esta semana (${formatFechaCorta(desde)} — ${formatFechaCorta(hasta)})`
+  if (periodo === "mes") return `Este mes (${formatFechaCorta(desde)} — ${formatFechaCorta(hasta)})`
+  if (periodo === "anio") return `Este año (${formatFechaCorta(desde)} — ${formatFechaCorta(hasta)})`
+  const inicio = desde ? formatFechaCorta(desde) : "inicio"
+  const fin = hasta ? formatFechaCorta(hasta) : "hoy"
+  return `${inicio} — ${fin}`
+}
+
+function etiquetaCorta(periodo: Periodo, desde: string, hasta: string): string {
+  if (periodo === "todo") return "Periodo"
+  if (periodo === "dia") return "Hoy"
+  if (periodo === "semana") return "Semana"
+  if (periodo === "mes") return "Mes"
+  if (periodo === "anio") return "Año"
+  const inicio = desde ? formatFechaCorta(desde) : "…"
+  const fin = hasta ? formatFechaCorta(hasta) : "…"
+  return `${inicio} — ${fin}`
+}
 
 export default function EstadisticasPage() {
   return (
@@ -86,6 +138,12 @@ function EstadisticasContent() {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [advFacultad, setAdvFacultad] = useState("TODOS")
   const [advPrograma, setAdvPrograma] = useState("TODOS")
+  const [periodo, setPeriodo] = useState<Periodo>("todo")
+  const [statsDesde, setStatsDesde] = useState("")
+  const [statsHasta, setStatsHasta] = useState("")
+  const [periodoDialogOpen, setPeriodoDialogOpen] = useState(false)
+  const [draftDesde, setDraftDesde] = useState("")
+  const [draftHasta, setDraftHasta] = useState("")
 
   const puedeCambiarSede = user ? canOperateAllSedes(user.rol) : false
   const sedeEfectiva: SedeFiltro = puedeCambiarSede ? filtroSede : getStaffSede(user)
@@ -99,28 +157,69 @@ function EstadisticasContent() {
   useEffect(() => {
     const loadStats = async () => {
       setLoading(true)
+      const desde = statsDesde || undefined
+      const hasta = statsHasta || undefined
       if (filtro === "tenis_mesa") {
-        const data = await generateTableTennisStats(
-          undefined,
-          undefined,
-          sedeEfectiva,
-        )
+        const data = await generateTableTennisStats(desde, hasta, sedeEfectiva)
         setStats(data)
       } else {
         const instalacion = filtro === "todas" ? undefined : filtro
-        const data = await generateStats(instalacion, undefined, undefined, sedeEfectiva)
+        const data = await generateStats(instalacion, desde, hasta, sedeEfectiva)
         setStats(data)
       }
       setLoading(false)
     }
     if (user) loadStats()
-  }, [filtro, sedeEfectiva, user])
+  }, [filtro, sedeEfectiva, user, statsDesde, statsHasta])
 
   const handleOpenPdfDialog = () => {
-    setFechaDesde("")
-    setFechaHasta("")
+    setFechaDesde(statsDesde)
+    setFechaHasta(statsHasta)
     setPdfSede(puedeCambiarSede ? filtroSede : getStaffSede(user))
     setPdfDialogOpen(true)
+  }
+
+  const abrirPeriodo = () => {
+    setDraftDesde(statsDesde)
+    setDraftHasta(statsHasta)
+    setPeriodoDialogOpen(true)
+  }
+
+  const aplicarPreset = (preset: Exclude<Periodo, "todo" | "rango">) => {
+    const { desde, hasta } = rangoDePeriodo(preset)
+    setPeriodo(preset)
+    setStatsDesde(desde)
+    setStatsHasta(hasta)
+    setPeriodoDialogOpen(false)
+  }
+
+  const aplicarRango = () => {
+    let desde = draftDesde
+    let hasta = draftHasta
+    if (desde && hasta && desde > hasta) {
+      const tmp = desde
+      desde = hasta
+      hasta = tmp
+    }
+    if (!desde && !hasta) {
+      setPeriodo("todo")
+      setStatsDesde("")
+      setStatsHasta("")
+    } else {
+      setPeriodo("rango")
+      setStatsDesde(desde)
+      setStatsHasta(hasta)
+    }
+    setPeriodoDialogOpen(false)
+  }
+
+  const limpiarPeriodo = () => {
+    setPeriodo("todo")
+    setStatsDesde("")
+    setStatsHasta("")
+    setDraftDesde("")
+    setDraftHasta("")
+    setPeriodoDialogOpen(false)
   }
 
   const handleGeneratePDF = async () => {
@@ -167,8 +266,8 @@ function EstadisticasContent() {
   }
 
   const handleOpenExcelDialog = () => {
-    setExcelFechaDesde("")
-    setExcelFechaHasta("")
+    setExcelFechaDesde(statsDesde)
+    setExcelFechaHasta(statsHasta)
     setExcelDialogOpen(true)
   }
 
@@ -254,6 +353,8 @@ function EstadisticasContent() {
           <strong>
             {sedeEfectiva === "todas" ? "Juntas (sumatoria)" : `Sede ${SEDE_LABELS[sedeEfectiva]}`}
           </strong>
+          {" · "}
+          <strong>{etiquetaPeriodo(periodo, statsDesde, statsHasta)}</strong>
         </p>
       </div>
 
@@ -343,6 +444,15 @@ function EstadisticasContent() {
             </div>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button
+          variant={periodo === "todo" ? "outline" : "default"}
+          onClick={abrirPeriodo}
+          className={periodo === "todo" ? "" : "bg-indigo-600 hover:bg-indigo-700"}
+          title="Filtrar por día, semana, mes, año o un rango de fechas"
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          {etiquetaCorta(periodo, statsDesde, statsHasta)}
+        </Button>
         {hasAdvancedFilters && (
           <Badge variant="secondary" className="text-xs">
             Filtros: {advFacultad !== "TODOS" ? "facultad" : ""}{" "}
@@ -408,6 +518,77 @@ function EstadisticasContent() {
           Descargar Excel
         </Button>
       </div>
+
+      <Dialog open={periodoDialogOpen} onOpenChange={setPeriodoDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Filtrar por periodo</DialogTitle>
+            <DialogDescription>
+              Elige un día, semana, mes, año o un rango. Las cifras y las gráficas usan este periodo.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["dia", "Día"],
+                  ["semana", "Semana"],
+                  ["mes", "Mes"],
+                  ["anio", "Año"],
+                ] as const
+              ).map(([id, label]) => (
+                <Button
+                  key={id}
+                  type="button"
+                  variant={periodo === id ? "default" : "outline"}
+                  className={periodo === id ? "bg-indigo-600 hover:bg-indigo-700" : ""}
+                  onClick={() => aplicarPreset(id)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className="space-y-3">
+              <Label>Rango de fechas</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="periodoDesde" className="text-xs text-muted-foreground">
+                    Desde
+                  </Label>
+                  <Input
+                    id="periodoDesde"
+                    type="date"
+                    value={draftDesde}
+                    onChange={(e) => setDraftDesde(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="periodoHasta" className="text-xs text-muted-foreground">
+                    Hasta
+                  </Label>
+                  <Input
+                    id="periodoHasta"
+                    type="date"
+                    value={draftHasta}
+                    onChange={(e) => setDraftHasta(e.target.value)}
+                  />
+                </div>
+              </div>
+              <Button type="button" className="w-full" onClick={aplicarRango}>
+                Aplicar rango
+              </Button>
+            </div>
+          </div>
+          <DialogFooter className="sm:justify-between">
+            <Button type="button" variant="ghost" onClick={limpiarPeriodo}>
+              Todo el historial
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setPeriodoDialogOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo Excel */}
       <Dialog open={excelDialogOpen} onOpenChange={setExcelDialogOpen}>
@@ -760,7 +941,11 @@ function EstadisticasContent() {
               <Calendar className="h-5 w-5" />
               Entradas por Dia
             </CardTitle>
-            <CardDescription>Registro de entradas en los ultimos dias</CardDescription>
+            <CardDescription>
+              {periodo === "todo"
+                ? "Registro de entradas en los ultimos dias"
+                : etiquetaPeriodo(periodo, statsDesde, statsHasta)}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {stats.entradasPorDia.length > 0 ? (

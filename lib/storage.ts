@@ -262,18 +262,27 @@ export async function generateStats(
 ): Promise<AttendanceStats> {
   const users = await getUsers()
   const allEntries = filterBySede(await getEntries(), sedeFiltro)
-  const usageCounts = await getUserServiceUsageCounts(sedeFiltro)
-  const { getAllTableTennisLoans, getAllTableTennisAccess } = await import("./table-tennis-storage")
+  const hasDateFilter = Boolean(fechaDesde || fechaHasta)
+  const usageCounts = await getUserServiceUsageCounts(sedeFiltro, fechaDesde, fechaHasta)
+  const { getAllTableTennisLoans, getAllTableTennisAccess, loanUsuarioId } = await import(
+    "./table-tennis-storage"
+  )
   const [tenisLoansRaw, tenisAccessRaw] = await Promise.all([
     getAllTableTennisLoans(),
     getAllTableTennisAccess(),
   ])
   const tenisLoans = filterBySede(tenisLoansRaw, sedeFiltro)
   const tenisAccess = filterBySede(tenisAccessRaw, sedeFiltro)
+  const tenisLoansInRange = tenisLoans.filter((l) => inDateRange(l.fecha, fechaDesde, fechaHasta))
+  const tenisAccessInRange = tenisAccess.filter((a) => inDateRange(a.fecha, fechaDesde, fechaHasta))
 
-  const totalGimnasio = allEntries.filter((e) => (e.instalacion ?? "gimnasio") === "gimnasio").length
-  const totalPiscina = allEntries.filter((e) => e.instalacion === "piscina").length
-  const totalTenisMesa = tenisLoans.length + tenisAccess.length
+  const totalGimnasio = allEntries.filter(
+    (e) => (e.instalacion ?? "gimnasio") === "gimnasio" && inDateRange(e.fecha, fechaDesde, fechaHasta),
+  ).length
+  const totalPiscina = allEntries.filter(
+    (e) => e.instalacion === "piscina" && inDateRange(e.fecha, fechaDesde, fechaHasta),
+  ).length
+  const totalTenisMesa = tenisLoansInRange.length + tenisAccessInRange.length
   const prestamosActivosTenis = tenisLoans.filter((l) => l.estado === "activo").length
 
   const usuariosUnicosGimnasio = Object.values(usageCounts).filter((u) => u.gimnasio > 0).length
@@ -284,16 +293,25 @@ export async function generateStats(
     ? allEntries.filter((e) => (e.instalacion ?? "gimnasio") === instalacion)
     : allEntries
 
-  if (fechaDesde) entries = entries.filter((e) => e.fecha >= fechaDesde!)
-  if (fechaHasta) entries = entries.filter((e) => e.fecha <= fechaHasta!)
+  entries = entries.filter((e) => inDateRange(e.fecha, fechaDesde, fechaHasta))
 
   let usuariosUnicos: number | undefined
   if (instalacion === "gimnasio") usuariosUnicos = usuariosUnicosGimnasio
   else if (instalacion === "piscina") usuariosUnicos = usuariosUnicosPiscina
 
   const userIdsWithActivity = new Set(entries.map((e) => e.usuarioId))
+  if (hasDateFilter && !instalacion) {
+    tenisLoansInRange.forEach((l) => {
+      const uid = loanUsuarioId(l)
+      if (uid) userIdsWithActivity.add(uid)
+      if (l.usuario2Id) userIdsWithActivity.add(l.usuario2Id)
+    })
+    tenisAccessInRange.forEach((a) => {
+      if (a.usuarioId) userIdsWithActivity.add(a.usuarioId)
+    })
+  }
   const usersForDemographics =
-    sedeFiltro && sedeFiltro !== "todas"
+    (sedeFiltro && sedeFiltro !== "todas") || hasDateFilter
       ? users.filter((u) => userIdsWithActivity.has(u.id))
       : users
 
@@ -323,10 +341,10 @@ export async function generateStats(
     entradasPorHoraMap[hora] = (entradasPorHoraMap[hora] || 0) + 1
   })
 
-  const entradasPorDia = Object.entries(entradasPorDiaMap)
+  const entradasPorDiaAll = Object.entries(entradasPorDiaMap)
     .map(([fecha, cantidad]) => ({ fecha, cantidad }))
     .sort((a, b) => a.fecha.localeCompare(b.fecha))
-    .slice(-30)
+  const entradasPorDia = hasDateFilter ? entradasPorDiaAll : entradasPorDiaAll.slice(-30)
 
   const entradasPorHora = Object.entries(entradasPorHoraMap)
     .map(([hora, cantidad]) => ({ hora, cantidad }))
